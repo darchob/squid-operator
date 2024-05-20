@@ -1,0 +1,57 @@
+include:
+  - project: claranet/guildes/pipeline/helpers
+    ref: v4.0.0
+    file: tool_versions.yml
+  - project: 'claranet/smartinfra/tooling/projects/templates/golang'
+    file: '/gitlab-ci.yml'
+
+golangci:
+  extends:
+    - .golangci_lint
+
+# go_test:
+#   extends:
+#     - .go_test
+
+# go_deps:
+#   extends:
+#     - .go_deps
+
+variables:
+  KUBERNETES_CPU_REQUEST: "1"
+  KUBERNETES_MEMORY_LIMIT: "2Gi"
+  KUBERNETES_MEMORY_REQUEST: "2Gi"
+
+stages:
+  - build
+  - test
+  - publish
+
+default:
+  tags:
+    - ops4ops-pipeline
+
+.build_image: &build_image
+  stage: build
+  image:
+    name: gcr.io/kaniko-project/executor:debug
+    entrypoint: [""]
+  needs:
+    - tool versions
+  script:
+    - DESTINATION="${CI_REGISTRY_IMAGE}/${IMAGE_NAME}:${CI_COMMIT_SHORT_SHA}"
+    - echo $DESTINATION
+    - echo "{\"auths\":{\"$CI_REGISTRY\":{\"auth\":\"$(echo -n ${CI_REGISTRY_USER}:${CI_REGISTRY_PASSWORD} | base64 | tr -d '\n')\"}}}" > /kaniko/.docker/config.json
+    - /kaniko/executor
+      --context $CI_PROJECT_DIR
+      --dockerfile $CI_PROJECT_DIR/$DOCKERFILE
+      --destination $DESTINATION
+      --build-arg GOLANG_VERSION=1.21
+      $ADDITIONAL_KANIKO_FLAG
+    - echo "Successfully pushed image to ${DESTINATION}"
+
+Build Operator:
+  <<: *build_image
+  variables:
+    DOCKERFILE: Dockerfile
+    IMAGE_NAME: suqid-operator

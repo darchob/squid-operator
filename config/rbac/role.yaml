@@ -1,0 +1,58 @@
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: manager-role
+rules:
+- apiGroups:
+  - squid.cdk.clara.net
+  resources:
+  - acls
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
+  - squid.cdk.clara.net
+  resources:
+  - acls/finalizers
+  verbs:
+  - update
+- apiGroups:
+  - squid.cdk.clara.net
+  resources:
+  - acls/status
+  verbs:
+  - get
+  - patch
+  - update
+- apiGroups:
+  - squid.cdk.clara.net
+  resources:
+  - configs
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
+  - squid.cdk.clara.net
+  resources:
+  - configs/finalizers
+  verbs:
+  - update
+- apiGroups:
+  - squid.cdk.clara.net
+  resources:
+  - configs/status
+  verbs:
+  - get
+  - patch
+  - update

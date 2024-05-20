@@ -1,0 +1,23 @@
+# permissions for end users to view acls.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  labels:
+    app.kubernetes.io/name: squid-operator
+    app.kubernetes.io/managed-by: kustomize
+  name: acls-viewer-role
+rules:
+- apiGroups:
+  - squid.cdk.clara.net
+  resources:
+  - acls
+  verbs:
+  - get
+  - list
+  - watch
+- apiGroups:
+  - squid.cdk.clara.net
+  resources:
+  - acls/status
+  verbs:
+  - get

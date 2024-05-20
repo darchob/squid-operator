@@ -1,0 +1,5 @@
+## Append samples of your project ##
+resources:
+- squid_v1_acls.yaml
+- squid_v1_configs.yaml
+#+kubebuilder:scaffold:manifestskustomizesamples
