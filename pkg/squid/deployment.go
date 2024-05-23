@@ -37,11 +37,8 @@ func NewDeployment(sr *squidv1.Configs) *appsv1.Deployment {
 							Name: fmt.Sprintf("%s-config", sr.Name),
 							VolumeSource: corev1.VolumeSource{
 								ConfigMap: &corev1.ConfigMapVolumeSource{
-									Items: []corev1.KeyToPath{
-										{
-											Key:  sr.Name,
-											Path: "squid.conf",
-										},
+									LocalObjectReference: corev1.LocalObjectReference{
+										Name: sr.Name,
 									},
 								},
 							},

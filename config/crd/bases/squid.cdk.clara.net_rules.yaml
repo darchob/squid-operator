@@ -4,20 +4,24 @@ kind: CustomResourceDefinition
 metadata:
   annotations:
     controller-gen.kubebuilder.io/version: v0.14.0
-  name: acls.squid.cdk.clara.net
+  name: rules.squid.cdk.clara.net
 spec:
   group: squid.cdk.clara.net
   names:
-    kind: Acls
-    listKind: AclsList
-    plural: acls
-    singular: acls
+    kind: Rules
+    listKind: RulesList
+    plural: rules
+    singular: rules
   scope: Namespaced
   versions:
-  - name: v1
+  - additionalPrinterColumns:
+    - jsonPath: .status.merged
+      name: Merged
+      type: boolean
+    name: v1
     schema:
       openAPIV3Schema:
-        description: Acls is the Schema for the acls API
+        description: Rules is the Schema for the rules API
         properties:
           apiVersion:
             description: |-
@@ -37,15 +41,26 @@ spec:
           metadata:
             type: object
           spec:
-            description: AclsSpec defines the desired state of Acls
+            description: RulesSpec defines the desired state of Rules
             properties:
-              acls:
+              name:
                 type: string
+              rules:
+                type: string
+              squidConfigRef:
+                properties:
+                  name:
+                    type: string
+                required:
+                - name
+                type: object
             required:
-            - acls
+            - name
+            - rules
+            - squidConfigRef
             type: object
           status:
-            description: AclsStatus defines the observed state of Acls
+            description: RulesStatus defines the observed state of Rules
             properties:
               merged:
                 type: boolean

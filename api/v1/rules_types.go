@@ -20,44 +20,43 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
-// AclsSpec defines the desired state of Acls
-type AclsSpec struct {
-	// Defines the Squid ACLs Config as String
-	// squidConfig: |
-	//  # Example Config
-	//  acl H2G2 10.0.0.0/8
-	//  http_access allow H2G2
-	//  ...
-	ACLs string `json:"acls"`
+type SquidConfig struct {
+	Name string `json:"name"`
 }
 
-// AclsStatus defines the observed state of Acls
-type AclsStatus struct {
-	// Ensure ACLs is merged to the global configmap
+// RulesSpec defines the desired state of Rules
+type RulesSpec struct {
+	Name        string      `json:"name"`
+	SquidConfig SquidConfig `json:"squidConfigRef"`
+	Rules       string      `json:"rules"`
+}
+
+// RulesStatus defines the observed state of Rules
+type RulesStatus struct {
 	Merged bool `json:"merged,omitempty"`
 }
 
-//+kubebuilder:object:root=true
-//+kubebuilder:subresource:status
-
-// Acls is the Schema for the acls API
-type Acls struct {
+// +kubebuilder:object:root=true
+// +kubebuilder:subresource:status
+// +kubebuilder:printcolumn:name="Merged",type="boolean",JSONPath=".status.merged"
+// Rules is the Schema for the rules API
+type Rules struct {
 	metav1.TypeMeta   `json:",inline"`
 	metav1.ObjectMeta `json:"metadata,omitempty"`
 
-	Spec   AclsSpec   `json:"spec,omitempty"`
-	Status AclsStatus `json:"status,omitempty"`
+	Spec   RulesSpec   `json:"spec,omitempty"`
+	Status RulesStatus `json:"status,omitempty"`
 }
 
 //+kubebuilder:object:root=true
 
-// AclsList contains a list of Acls
-type AclsList struct {
+// RulesList contains a list of Rules
+type RulesList struct {
 	metav1.TypeMeta `json:",inline"`
 	metav1.ListMeta `json:"metadata,omitempty"`
-	Items           []Acls `json:"items"`
+	Items           []Rules `json:"items"`
 }
 
 func init() {
-	SchemeBuilder.Register(&Acls{}, &AclsList{})
+	SchemeBuilder.Register(&Rules{}, &RulesList{})
 }

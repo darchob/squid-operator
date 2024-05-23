@@ -17,17 +17,19 @@ limitations under the License.
 package v1
 
 import (
-	appsv1 "k8s.io/api/apps/v1"
 	autoscalingv1 "k8s.io/api/autoscaling/v1"
 	networkingv1 "k8s.io/api/networking/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
+type StatusPhase string
+
 const (
-	PhasePending = "PENDING"
-	PhaseRunning = "RUNNING"
-	PhaseMerged  = "MERGED"
-	PhaseDone    = "DONE"
+	PhasePending  StatusPhase = "PENDING"
+	PhaseDeployed StatusPhase = "DEPLOYED"
+	PhaseMerged   StatusPhase = "MERGED"
+	PhaseDone     StatusPhase = "DONE"
+	PhaseError    StatusPhase = "ERROR"
 )
 
 // Defines the repository and tag image
@@ -55,17 +57,21 @@ type ConfigsSpec struct {
 	//  http_access allow localnet
 	//  http_access allow localhost
 	//  http_access deny all
-	SquidConfig string `json:"squidConfig,omitempty"`
+	SquidConfig string `json:"squidConfig"`
 }
 
 // ConfigsStatus defines the observed state of Configs
 type ConfigsStatus struct {
-	DeployStatus appsv1.DeploymentStatus `json:"squid,omitempty"`
+	Deployment     StatusPhase `json:"deployment,omitempty"`
+	ConfigMap      StatusPhase `json:"configmap,omitempty"`
+	ServiceAccount StatusPhase `json:"ServiceAccount,omitempty"`
 }
 
-//+kubebuilder:object:root=true
-//+kubebuilder:subresource:status
-
+// +kubebuilder:object:root=true
+// +kubebuilder:subresource:status
+// +kubebuilder:printcolumn:name="Deployment",type="string",JSONPath=".status.deployment"
+// +kubebuilder:printcolumn:name="ConfigMap",type="string",JSONPath=".status.configmap"
+// +kubebuilder:printcolumn:name="ServiceAccount",type="string",JSONPath=".status.ServiceAccount"
 // Configs is the Schema for the configs API
 type Configs struct {
 	metav1.TypeMeta   `json:",inline"`

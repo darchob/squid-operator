@@ -27,7 +27,7 @@ func ObjectMeta(sr *squidv1.Configs) metav1.ObjectMeta {
 	return metav1.ObjectMeta{
 		Name:        sr.Name,
 		Namespace:   sr.Namespace,
-		Labels:      sr.Labels,
+		Labels:      Labels(sr),
 		Annotations: Annotations(),
 	}
 }

@@ -26,4 +26,13 @@ resources:
   kind: Configs
   path: git.fr.clara.net/claranet/healthcare/buildops/projects/kubernetes/operators/squid-operator/api/v1
   version: v1
+- api:
+    crdVersion: v1
+    namespaced: true
+  controller: true
+  domain: cdk.clara.net
+  group: squid
+  kind: Rules
+  path: git.fr.clara.net/claranet/healthcare/buildops/projects/kubernetes/operators/squid-operator/api/v1
+  version: v1
 version: "3"

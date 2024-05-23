@@ -19,6 +19,8 @@ package controller
 import (
 	"context"
 
+	appsv1 "k8s.io/api/apps/v1"
+	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -49,14 +51,14 @@ func (r *ConfigsReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ct
 
 	configs := &squidv1.Configs{}
 
-	log.Info("Squid Configs reconciling %s")
+	log.Info("Squid Configs reconciling ", "name", req.NamespacedName.Name)
 	if err := r.Get(ctx, req.NamespacedName, configs); err != nil {
 		return ctrl.Result{}, client.IgnoreNotFound(err)
 	}
 
 	// Delete deployment and ConfigMap
 	if !configs.ObjectMeta.DeletionTimestamp.IsZero() {
-		//Delete Squid Deployment
+		//TODO !!! Delete Squid Deployment
 		return ctrl.Result{}, nil
 	}
 
@@ -64,25 +66,45 @@ func (r *ConfigsReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ct
 	if !controllerutil.ContainsFinalizer(configs, finalizerName) {
 		configs.ObjectMeta.Finalizers = append(configs.ObjectMeta.Finalizers, finalizerName)
 		if err := r.Update(ctx, configs); err != nil {
-			log.Error(err, "unable to update Squid Configs")
 			return ctrl.Result{}, err
 		}
+		return r.handlingConfigUpdate(ctx, configs)
+	}
+
+	configs.Status.ServiceAccount = squidv1.PhasePending
+	configs.Status.ConfigMap = squidv1.PhasePending
+	configs.Status.Deployment = squidv1.PhasePending
+
+	log.Info("Check squid service account", "name", req.NamespacedName.Name)
+	if err := r.ensureServiceAccount(ctx, configs); err != nil {
+		configs.Status.ServiceAccount = squidv1.PhaseError
+		log.Error(err, "On ServiceAccount create task", "name", req.NamespacedName.Name)
+		return r.handlingConfigUpdate(ctx, configs)
 	}
 
 	if err := r.ensureDefaultConfigMap(ctx, configs); err != nil {
-		return ctrl.Result{}, err
+		configs.Status.ConfigMap = squidv1.PhaseError
+		return r.handlingConfigUpdate(ctx, configs)
 	}
 
 	if err := r.ensureDeployment(ctx, configs); err != nil {
-		return ctrl.Result{}, err
+		configs.Status.Deployment = squidv1.PhaseError
+		return r.handlingConfigUpdate(ctx, configs)
 	}
 
-	return ctrl.Result{}, nil
+	configs.Status.ServiceAccount = squidv1.PhaseDeployed
+	configs.Status.ConfigMap = squidv1.PhaseDeployed
+	configs.Status.Deployment = squidv1.PhaseDeployed
+
+	return r.handlingConfigUpdate(ctx, configs)
 }
 
 // SetupWithManager sets up the controller with the Manager.
 func (r *ConfigsReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	return ctrl.NewControllerManagedBy(mgr).
 		For(&squidv1.Configs{}).
+		Owns(&corev1.ConfigMap{}).
+		Owns(&appsv1.Deployment{}).
+		Owns(&corev1.ServiceAccount{}).
 		Complete(r)
 }

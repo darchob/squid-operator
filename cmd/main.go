@@ -122,18 +122,18 @@ func main() {
 		os.Exit(1)
 	}
 
-	if err = (&controller.AclsReconciler{
-		Client: mgr.GetClient(),
-		Scheme: mgr.GetScheme(),
-	}).SetupWithManager(mgr); err != nil {
-		setupLog.Error(err, "unable to create controller", "controller", "Acls")
-		os.Exit(1)
-	}
 	if err = (&controller.ConfigsReconciler{
 		Client: mgr.GetClient(),
 		Scheme: mgr.GetScheme(),
 	}).SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "Configs")
+		os.Exit(1)
+	}
+	if err = (&controller.RulesReconciler{
+		Client: mgr.GetClient(),
+		Scheme: mgr.GetScheme(),
+	}).SetupWithManager(mgr); err != nil {
+		setupLog.Error(err, "unable to create controller", "controller", "Rules")
 		os.Exit(1)
 	}
 	//+kubebuilder:scaffold:builder

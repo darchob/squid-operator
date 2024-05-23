@@ -14,6 +14,8 @@ resources:
 # default, aiding admins in cluster management. Those roles are
 # not used by the Project itself. You can comment the following lines
 # if you do not want those helpers be installed with your Project.
+- rules_editor_role.yaml
+- rules_viewer_role.yaml
 - configs_editor_role.yaml
 - configs_viewer_role.yaml
 - acls_editor_role.yaml

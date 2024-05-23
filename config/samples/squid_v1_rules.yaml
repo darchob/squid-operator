@@ -1,0 +1,31 @@
+apiVersion: squid.cdk.clara.net/v1
+kind: Rules
+metadata:
+  labels:
+    app.kubernetes.io/name: squid-operator
+    app.kubernetes.io/managed-by: kustomize
+  name: rules-sample
+  namespace: claranet-system
+spec:
+  name: infra
+  squidConfigRef:
+    name: internal-squid
+  rules: |
+    # INFRA RULES
+    # Other data
+---
+apiVersion: squid.cdk.clara.net/v1
+kind: Rules
+metadata:
+  labels:
+    app.kubernetes.io/name: squid-operator
+    app.kubernetes.io/managed-by: kustomize
+  name: rules-sample-two
+  namespace: claranet-system
+spec:
+  name: infra
+  squidConfigRef:
+    name: internal-squid
+  rules: |
+    # INFRA RULES Two
+    # Other data Two
