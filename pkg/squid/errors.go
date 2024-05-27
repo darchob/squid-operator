@@ -1,9 +1,9 @@
 package squid
 
 const (
-	noDiffError = "no diff with incomming rules and currents"
+	DuplicateError = "found duplicate rule : "
 )
 
 func IsRulesExistError(err error) bool {
-	return err.Error() != noDiffError
+	return err.Error() != DuplicateError
 }

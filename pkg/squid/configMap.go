@@ -2,6 +2,7 @@ package squid
 
 import (
 	"fmt"
+	"log"
 	"reflect"
 	"strings"
 
@@ -35,7 +36,7 @@ func InitialConfigMap(sr *squidv1.Configs, data string) *corev1.ConfigMap {
 	}
 }
 
-// Utils
+// Remove block data
 func cleanData(rules *squidv1.Rules, current *corev1.ConfigMap) map[string][]string {
 	data := make(map[string][]string)
 	newData := make(chan []string)
@@ -55,45 +56,93 @@ func cleanData(rules *squidv1.Rules, current *corev1.ConfigMap) map[string][]str
 	return data
 }
 
-func compare(data map[string][]string) {
-	diff := make(chan bool)
+func generate(current ...string) <-chan int {
+	index := make(chan int)
 
-	for _, current := range data["current"] {
-		go func() {
-			diff <- exist(current, data["newData"])
-		}()
+	go func() {
+		defer close(index)
+		for i := range current {
+			index <- i
+		}
+	}()
+	return index
+}
+
+func compare(incoming string, currentData []string, current <-chan int) <-chan int {
+	index := make(chan int)
+
+	go func() {
+		defer close(index)
+		for i := range current {
+			if reflect.DeepEqual(incoming, currentData[i]) {
+				log.Printf("DUPLICATED %s", incoming)
+				index <- i
+			}
+		}
+	}()
+
+	return index
+}
+
+func exist(data map[string][]string) int {
+	out := make(<-chan int)
+
+	for _, line := range data["newData"] {
+		gen := generate(data["current"]...)
+		out = compare(line, data["current"], gen)
 	}
 
+	return <-out
+}
+
+func remove(data map[string][]string) []string {
+
+	for _, line := range data["newData"] {
+		gen := generate(data["current"]...)
+		out := compare(line, data["current"], gen)
+		index := 0
+		index = <-out
+
+		if index < len(data["current"]) {
+			log.Printf("RULES to remove %s", data["current"][index])
+			// Remove the element at index i from a.
+			data["current"][index] = data["current"][len(data["current"])-1] // Copy last element to index i.
+			data["current"][len(data["current"])-1] = ""                     // Erase last element (write zero value).
+			data["current"] = data["current"][:len(data["current"])-1]       // Truncate slice.
+		}
+	}
+
+	return data["current"]
 }
 
 func updateData(rules *squidv1.Rules, current *corev1.ConfigMap) (string, error) {
 	data := cleanData(rules, current)
 
-	return "", fmt.Errorf(noDiffError)
+	duplicateLine := exist(data)
+	if duplicateLine > 0 {
+		return "", fmt.Errorf(fmt.Sprintf("%s : %s", DuplicateError, data["current"][duplicateLine]))
+	}
+
+	return fmt.Sprintf("%s\n%s",
+		strings.Join(data["current"], "\n"),
+		strings.Join(data["newData"], "\n")), nil
 }
 
 func removeData(rules *squidv1.Rules, current *corev1.ConfigMap) string {
 	data := cleanData(rules, current)
-
-	return strings.ReplaceAll(data["current"], data["newData"], "")
+	cleanedData := remove(data)
+	return strings.TrimSpace(strings.Join(cleanedData, "\n"))
 }
 
-func exist(current string, incoming []string) bool {
-	for line := range incoming {
-		if reflect.DeepEqual(current, line) {
-			return true
-		}
-	}
-
-	return false
-}
-
+// Trim Space
 func formatData(data string) []string {
 	var newString []string
+	lines := strings.Split(strings.TrimRight(data, "\n"), "\n")
+
 	// Line by line
-	for _, line := range strings.Split(strings.TrimRight(data, "\n"), "\n") {
+	for _, line := range lines {
 		//TrimSpace
-		newString = append(newString, strings.TrimSpace(line))
+		newString = append(newString, strings.TrimSpace(fmt.Sprintf("%s\n", strings.TrimSpace(line))))
 
 	}
 

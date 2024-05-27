@@ -18,28 +18,24 @@ package controller
 
 import (
 	"context"
+	"fmt"
 
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/client-go/tools/record"
 	ctrl "sigs.k8s.io/controller-runtime"
-	"sigs.k8s.io/controller-runtime/pkg/builder"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
-	"sigs.k8s.io/controller-runtime/pkg/event"
 	"sigs.k8s.io/controller-runtime/pkg/log"
-	"sigs.k8s.io/controller-runtime/pkg/predicate"
 
 	squidv1 "git.fr.clara.net/claranet/healthcare/buildops/projects/kubernetes/operators/squid-operator/api/v1"
-)
-
-var (
-	controllerlog = ctrl.Log.WithName("controller")
 )
 
 // RulesReconciler reconciles a Rules object
 type RulesReconciler struct {
 	client.Client
-	Scheme *runtime.Scheme
+	Scheme   *runtime.Scheme
+	Recorder record.EventRecorder
 }
 
 //+kubebuilder:rbac:groups=squid.cdk.clara.net,resources=rules,verbs=get;list;watch;create;update;patch;delete
@@ -52,7 +48,8 @@ func (r *RulesReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl
 	_ = log.FromContext(ctx)
 
 	rules := &squidv1.Rules{}
-	controllerlog.Info("Check Rules and Update")
+	rules.Status.Merged = false
+
 	if err := r.Get(ctx, req.NamespacedName, rules); err != nil {
 		return ctrl.Result{}, client.IgnoreNotFound(err)
 	}
@@ -70,38 +67,33 @@ func (r *RulesReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl
 	if !rules.ObjectMeta.DeletionTimestamp.IsZero() {
 		rules.ObjectMeta.Finalizers = []string{}
 
-		controllerlog.Info("Clean configMap")
 		if err := r.CleanRules(ctx, rules); err != nil {
-			return ctrl.Result{}, err
+			r.Recorder.Event(rules, "Warning", "Not Merged", fmt.Sprintf("Rule %s has been not cleaned with error %s", rules.Name, err))
+			return r.handlingStatusRules(ctx, rules)
 		}
 
-		controllerlog.Info("Update Rules")
 		if err := r.Update(ctx, rules); err != nil {
-			return ctrl.Result{}, err
+			return r.handlingStatusRules(ctx, rules)
 		}
 
 		return ctrl.Result{}, nil
 	}
 
-	// Append existing ConfigMap
 	if err := r.EnsureRules(ctx, rules); err != nil {
-		rules.Status.Merged = false
+		r.Recorder.Event(rules, "Warning", "Not Merged", fmt.Sprintf("Rule %s has been not merged with error %s", rules.Name, err))
 		return r.handlingStatusRules(ctx, rules)
 	}
 
 	rules.Status.Merged = true
+	r.Recorder.Event(rules, "Normal", "Merged", fmt.Sprintf("Rule %s has been merged for SquidConfigs %s", rules.Name, rules.Spec.SquidConfig.Name))
 
-	return r.handlingStatusRules(ctx, rules)
+	return ctrl.Result{}, nil
 }
 
 // SetupWithManager sets up the controller with the Manager.
 func (r *RulesReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	return ctrl.NewControllerManagedBy(mgr).
 		For(&squidv1.Rules{}).
-		Owns(&corev1.ConfigMap{}, builder.WithPredicates(predicate.Funcs{
-			UpdateFunc: func(ue event.UpdateEvent) bool {
-				return true
-			},
-		})).
+		Owns(&corev1.ConfigMap{}).
 		Complete(r)
 }

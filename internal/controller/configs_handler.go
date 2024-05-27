@@ -2,6 +2,8 @@ package controller
 
 import (
 	"context"
+	"fmt"
+	"time"
 
 	"k8s.io/apimachinery/pkg/api/errors"
 
@@ -17,30 +19,26 @@ import (
 )
 
 func (r *ConfigsReconciler) handlingConfigUpdate(ctx context.Context, configs *squidv1.Configs) (ctrl.Result, error) {
-	log := log.FromContext(ctx)
+	_ = log.FromContext(ctx)
 
-	log.Info("Squid Configs update", "name", configs.Name)
 	if err := r.Status().Update(ctx, configs); err != nil {
-		log.Error(err, "On Configs CRD update task")
 		return ctrl.Result{
 			Requeue: true,
 		}, err
 	}
 
-	return ctrl.Result{}, nil
+	return ctrl.Result{Requeue: false}, nil
 }
 
 func (sr *ConfigsReconciler) ensureServiceAccount(ctx context.Context, configs *squidv1.Configs) error {
-	log := log.FromContext(ctx)
-	log.Info("Check squid service account", "name", configs.Name)
-	sa := corev1.ServiceAccount{}
+	_ = log.FromContext(ctx)
 
+	sa := corev1.ServiceAccount{}
 	if err := sr.Client.Get(ctx, client.ObjectKey{Namespace: configs.Namespace, Name: configs.Name}, &sa); err != nil {
 		if !errors.IsNotFound(err) {
 			return err
 		}
 
-		log.Info("Create new Squid ServiceAccount", "name", configs.Name)
 		newSa := squid.NewServiceAccount(configs)
 		if err = sr.Create(ctx, newSa); err != nil {
 			return err
@@ -51,15 +49,14 @@ func (sr *ConfigsReconciler) ensureServiceAccount(ctx context.Context, configs *
 		}
 	}
 
-	log.Info("Check squid ServiceAccount already deployed", "name", configs.Name)
+	sr.Recorder.Event(configs, "Normal", "Deployed", fmt.Sprintf("ServiceAccount %s has been deployed", sa.Name))
 
 	return nil
 }
 
 func (sr *ConfigsReconciler) ensureDeployment(ctx context.Context, configs *squidv1.Configs) error {
-	log := log.FromContext(ctx)
+	_ = log.FromContext(ctx)
 
-	log.Info("Check squid deployment ", "name", configs.Name)
 	deployment := appsv1.Deployment{}
 
 	if err := sr.Client.Get(ctx, client.ObjectKey{Namespace: configs.Namespace, Name: configs.Name}, &deployment); err != nil {
@@ -67,7 +64,6 @@ func (sr *ConfigsReconciler) ensureDeployment(ctx context.Context, configs *squi
 			return err
 		}
 
-		log.Info("Create new Squid Deployment", "name", configs.Name)
 		newDeploy := squid.NewDeployment(configs)
 		if err = sr.Create(ctx, newDeploy); err != nil {
 			return err
@@ -78,15 +74,35 @@ func (sr *ConfigsReconciler) ensureDeployment(ctx context.Context, configs *squi
 		}
 	}
 
-	log.Info("Check squid deployment already deployed", "name", configs.Name)
+	sr.Recorder.Event(configs, "Normal", "Deployed", fmt.Sprintf("Deployment %s has been deployed", deployment.Name))
+
+	return nil
+}
+
+func (sr *ConfigsReconciler) rollingUpdateDeployment(ctx context.Context, rules *squidv1.Rules) error {
+	_ = log.FromContext(ctx)
+
+	deployment := appsv1.Deployment{}
+
+	if err := sr.Client.Get(ctx, client.ObjectKey{Namespace: rules.Namespace, Name: rules.Spec.SquidConfig.Name}, &deployment); err != nil {
+		return err
+	}
+
+	if !rules.Status.Merged {
+		return fmt.Errorf("wait for configmap merged")
+	}
+
+	deployment.Spec.Template.ObjectMeta.Annotations["squid-operator.kubernetes.io/restartedAt"] = time.Now().Format(time.RFC3339)
+	if err := sr.Update(ctx, &deployment); err != nil {
+		return err
+	}
 
 	return nil
 }
 
 func (sr *ConfigsReconciler) ensureDefaultConfigMap(ctx context.Context, configs *squidv1.Configs) error {
-	log := log.FromContext(ctx)
+	_ = log.FromContext(ctx)
 
-	log.Info("Check squid configmap ", "name", configs.Name)
 	configmap := corev1.ConfigMap{}
 
 	if err := sr.Client.Get(ctx, client.ObjectKey{Namespace: configs.Namespace, Name: configs.Name}, &configmap); err != nil {
@@ -94,7 +110,6 @@ func (sr *ConfigsReconciler) ensureDefaultConfigMap(ctx context.Context, configs
 			return err
 		}
 
-		log.Info("Create new Squid Default ConfigMap", "name", configs.Name)
 		newConfigMap := squid.InitialConfigMap(configs, configs.Spec.SquidConfig)
 		if err = sr.Create(ctx, newConfigMap); err != nil {
 			return err
@@ -105,7 +120,6 @@ func (sr *ConfigsReconciler) ensureDefaultConfigMap(ctx context.Context, configs
 		}
 	}
 
-	log.Info("Squid configMap already exist", "name", configs.Name)
-
+	sr.Recorder.Event(configs, "Normal", "Deployed", fmt.Sprintf("ConfigMap %s has been deployed", configmap.Name))
 	return nil
 }

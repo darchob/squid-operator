@@ -18,48 +18,74 @@ package controller
 
 import (
 	"context"
+	"fmt"
+	"time"
 
+	squidv1 "git.fr.clara.net/claranet/healthcare/buildops/projects/kubernetes/operators/squid-operator/api/v1"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/types"
+	"k8s.io/client-go/tools/record"
 	ctrl "sigs.k8s.io/controller-runtime"
+	"sigs.k8s.io/controller-runtime/pkg/builder"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
+	"sigs.k8s.io/controller-runtime/pkg/event"
+	"sigs.k8s.io/controller-runtime/pkg/handler"
 	"sigs.k8s.io/controller-runtime/pkg/log"
-
-	squidv1 "git.fr.clara.net/claranet/healthcare/buildops/projects/kubernetes/operators/squid-operator/api/v1"
+	"sigs.k8s.io/controller-runtime/pkg/predicate"
+	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 )
 
 // ConfigsReconciler reconciles a Configs object
 type ConfigsReconciler struct {
 	client.Client
-	Scheme *runtime.Scheme
+	Scheme   *runtime.Scheme
+	Recorder record.EventRecorder
 }
 
 const (
 	finalizerName = "squid.ckd.clara.net/finalizer"
+	ruleField     = ".spec.squidConfig.name"
 )
 
 //+kubebuilder:rbac:groups=squid.cdk.clara.net,resources=configs,verbs=get;list;watch;create;update;patch;delete
 //+kubebuilder:rbac:groups=squid.cdk.clara.net,resources=configs/status,verbs=get;update;patch
 //+kubebuilder:rbac:groups=squid.cdk.clara.net,resources=configs/finalizers,verbs=update
+//+kubebuilder:rbac:groups=squid.cdk.clara.net,resources=rules/status,verbs=get
 
 // For more details, check Reconcile and its Result here:
 // - https://pkg.go.dev/sigs.k8s.io/controller-runtime@v0.17.3/pkg/reconcile
 func (r *ConfigsReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
-	log := log.FromContext(ctx)
+	_ = log.FromContext(ctx)
 
 	configs := &squidv1.Configs{}
+	rules := &squidv1.Rules{}
 
-	log.Info("Squid Configs reconciling ", "name", req.NamespacedName.Name)
 	if err := r.Get(ctx, req.NamespacedName, configs); err != nil {
-		return ctrl.Result{}, client.IgnoreNotFound(err)
-	}
+		if err := r.Get(ctx, req.NamespacedName, rules); err != nil {
+			return ctrl.Result{}, client.IgnoreNotFound(err)
+		}
 
-	// Delete deployment and ConfigMap
-	if !configs.ObjectMeta.DeletionTimestamp.IsZero() {
-		//TODO !!! Delete Squid Deployment
-		return ctrl.Result{}, nil
+		if err := r.Client.Get(ctx, client.ObjectKey{Namespace: rules.Namespace, Name: rules.Spec.SquidConfig.Name}, configs); err != nil {
+			return ctrl.Result{}, client.IgnoreNotFound(err)
+		}
+
+		configs.Status.Deployment = squidv1.PhasePending
+		if err := r.Update(ctx, configs); err != nil {
+			return ctrl.Result{}, err
+		}
+
+		if err := r.rollingUpdateDeployment(ctx, rules); err != nil {
+			r.Recorder.Event(configs, "Warning", "Not Merged", fmt.Sprintf("Rules with name %s couldn't be merged", rules.Name))
+			configs.Status.ConfigMap = squidv1.PhaseError
+			configs.Status.Deployment = squidv1.PhaseError
+			return r.handlingConfigUpdate(ctx, configs)
+		}
+
+		r.Recorder.Event(configs, "Normal", "Merged", fmt.Sprintf("Rules with name %s is merged and applied", rules.Name))
+		return ctrl.Result{}, err
 	}
 
 	// Ensure Finalizer
@@ -71,14 +97,22 @@ func (r *ConfigsReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ct
 		return r.handlingConfigUpdate(ctx, configs)
 	}
 
+	// Delete deployment and ConfigMap
+	if !configs.ObjectMeta.DeletionTimestamp.IsZero() {
+		configs.ObjectMeta.Finalizers = []string{}
+		if err := r.Update(ctx, configs); err != nil {
+			return r.handlingConfigUpdate(ctx, configs)
+		}
+
+		return ctrl.Result{}, nil
+	}
+
 	configs.Status.ServiceAccount = squidv1.PhasePending
 	configs.Status.ConfigMap = squidv1.PhasePending
 	configs.Status.Deployment = squidv1.PhasePending
 
-	log.Info("Check squid service account", "name", req.NamespacedName.Name)
 	if err := r.ensureServiceAccount(ctx, configs); err != nil {
 		configs.Status.ServiceAccount = squidv1.PhaseError
-		log.Error(err, "On ServiceAccount create task", "name", req.NamespacedName.Name)
 		return r.handlingConfigUpdate(ctx, configs)
 	}
 
@@ -99,12 +133,65 @@ func (r *ConfigsReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ct
 	return r.handlingConfigUpdate(ctx, configs)
 }
 
+func (r *ConfigsReconciler) findObjectsByNamespace(ctx context.Context, rules client.Object) []reconcile.Request {
+	_ = log.FromContext(ctx)
+
+	attachedConfigDeployments := &squidv1.RulesList{}
+
+	listOps := &client.ListOptions{
+		Namespace: rules.GetNamespace(),
+	}
+
+	err := r.List(ctx, attachedConfigDeployments, listOps)
+	if err != nil {
+		return []reconcile.Request{}
+	}
+
+	requests := make([]reconcile.Request, len(attachedConfigDeployments.Items))
+	for i, item := range attachedConfigDeployments.Items {
+		requests[i] = reconcile.Request{
+			NamespacedName: types.NamespacedName{
+				Name:      item.GetName(),
+				Namespace: item.GetNamespace(),
+			},
+		}
+	}
+	return requests
+}
+
 // SetupWithManager sets up the controller with the Manager.
 func (r *ConfigsReconciler) SetupWithManager(mgr ctrl.Manager) error {
+	log := log.Log.WithName("setup manager")
+
+	if err := mgr.GetFieldIndexer().IndexField(context.Background(), &squidv1.Rules{}, ruleField, func(rawObj client.Object) []string {
+		configRule := rawObj.(*squidv1.Rules)
+
+		if configRule.Spec.SquidConfig.Name == "" {
+			return nil
+		}
+
+		return []string{configRule.Spec.SquidConfig.Name}
+	}); err != nil {
+		log.Error(err, "Indexing error")
+		return err
+	}
+
 	return ctrl.NewControllerManagedBy(mgr).
 		For(&squidv1.Configs{}).
-		Owns(&corev1.ConfigMap{}).
+		Owns(&corev1.ConfigMap{}, builder.WithPredicates(predicate.Funcs{
+			UpdateFunc: func(ue event.UpdateEvent) bool {
+				ue.ObjectNew.SetAnnotations(map[string]string{
+					"squid-operator.kubernetes.io/updatedAt": time.Now().Format(time.RFC3339),
+				})
+				return false
+			},
+		})).
 		Owns(&appsv1.Deployment{}).
 		Owns(&corev1.ServiceAccount{}).
+		Watches(
+			&squidv1.Rules{},
+			handler.EnqueueRequestsFromMapFunc(r.findObjectsByNamespace),
+			builder.WithPredicates(predicate.ResourceVersionChangedPredicate{}),
+		).
 		Complete(r)
 }
