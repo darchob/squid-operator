@@ -65,6 +65,8 @@ default:
       --build-arg "HTTPS_PROXY=${https_proxy}"
       --build-arg "no_proxy=${no_proxy}"
       --build-arg "NO_PROXY=${no_proxy}"
+      --build-arg "TARGETARCH=amd64"
+      --build-arg "TARGETOS=linux"
       $ADDITIONAL_KANIKO_FLAG
     - echo "Successfully pushed image to ${DESTINATION}"
 
