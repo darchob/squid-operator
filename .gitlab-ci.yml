@@ -28,6 +28,8 @@ variables:
   HTTP_PROXY: "${PROXY_ADDRESS}"
   https_proxy: "${PROXY_ADDRESS}"
   HTTPS_PROXY: "${PROXY_ADDRESS}"
+  no_proxy: "localhost,127.0.0.0/8"
+  NO_PROXY: "localhost,127.0.0.0/8"
 
 stages:
   - build
@@ -55,6 +57,14 @@ default:
       --dockerfile $CI_PROJECT_DIR/$DOCKERFILE
       --destination $DESTINATION
       --build-arg GOLANG_VERSION=1.21
+      --build-arg "ftp_proxy=${ftp_proxy}"
+      --build-arg "FTP_PROXY=${ftp_proxy}"
+      --build-arg "http_proxy=${http_proxy}"
+      --build-arg "HTTP_PROXY=${http_proxy}"
+      --build-arg "https_proxy=${https_proxy}"
+      --build-arg "HTTPS_PROXY=${https_proxy}"
+      --build-arg "no_proxy=${no_proxy}"
+      --build-arg "NO_PROXY=${no_proxy}"
       $ADDITIONAL_KANIKO_FLAG
     - echo "Successfully pushed image to ${DESTINATION}"
 
