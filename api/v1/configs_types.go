@@ -25,11 +25,11 @@ import (
 type StatusPhase string
 
 const (
-	PhasePending  StatusPhase = "PENDING"
-	PhaseDeployed StatusPhase = "DEPLOYED"
-	PhaseMerged   StatusPhase = "MERGED"
-	PhaseDone     StatusPhase = "DONE"
-	PhaseError    StatusPhase = "ERROR"
+	PhasePending  StatusPhase = "Pending"
+	PhaseDeployed StatusPhase = "Deployed"
+	PhaseMerged   StatusPhase = "Merged"
+	PhaseDone     StatusPhase = "Done"
+	PhaseError    StatusPhase = "Error"
 )
 
 // Defines the repository and tag image
