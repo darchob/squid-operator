@@ -29,7 +29,8 @@ stages:
 
 default:
   tags:
-    - ops4ops-pipeline
+    - prj-internal-only
+    - healthcare
 
 .build_image: &build_image
   stage: build
