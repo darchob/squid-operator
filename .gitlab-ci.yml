@@ -2,8 +2,8 @@ include:
   - project: claranet/guildes/pipeline/helpers
     ref: v4.0.0
     file: tool_versions.yml
-  - project: 'claranet/smartinfra/tooling/projects/templates/golang'
-    file: '/gitlab-ci.yml'
+  - project: "claranet/smartinfra/tooling/projects/templates/golang"
+    file: "/gitlab-ci.yml"
 
 golangci:
   extends:
