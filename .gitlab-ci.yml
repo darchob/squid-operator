@@ -18,9 +18,16 @@ golangci:
 #     - .go_deps
 
 variables:
+  PROXY_ADDRESS: http://10.195.1.23:3128/
   KUBERNETES_CPU_REQUEST: "1"
   KUBERNETES_MEMORY_LIMIT: "2Gi"
   KUBERNETES_MEMORY_REQUEST: "2Gi"
+  ftp_proxy: "${PROXY_ADDRESS}"
+  FTP_PROXY: "${PROXY_ADDRESS}"
+  http_proxy: "${PROXY_ADDRESS}"
+  HTTP_PROXY: "${PROXY_ADDRESS}"
+  https_proxy: "${PROXY_ADDRESS}"
+  HTTPS_PROXY: "${PROXY_ADDRESS}"
 
 stages:
   - build
