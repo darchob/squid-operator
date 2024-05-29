@@ -74,4 +74,4 @@ Build Operator:
   <<: *build_image
   variables:
     DOCKERFILE: Dockerfile
-    IMAGE_NAME: suqid-operator
+    IMAGE_NAME: squid-operator
