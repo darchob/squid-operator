@@ -9,13 +9,13 @@ golangci:
   extends:
     - .golangci_lint
 
-# go_test:
-#   extends:
-#     - .go_test
+go_test:
+  extends:
+    - .go_test
 
-# go_deps:
-#   extends:
-#     - .go_deps
+go_deps:
+  extends:
+    - .go_deps
 
 variables:
   PROXY_ADDRESS: http://10.195.1.23:3128/
