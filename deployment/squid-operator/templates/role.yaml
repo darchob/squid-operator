@@ -1,8 +1,9 @@
----
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRole
 metadata:
-  name: manager-role
+  name: {{ include "squid-operator.fullname" . }}
+  lables:
+   {{- include "squid-operator.labels" . | nindent 4 }}
 rules:
 - apiGroups:
   - ""
