@@ -68,7 +68,7 @@ func (r *RulesReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl
 		rules.ObjectMeta.Finalizers = []string{}
 
 		if err := r.CleanRules(ctx, rules); err != nil {
-			r.Recorder.Event(rules, "Warning", "Not Merged", fmt.Sprintf("Rule %s has been not cleaned with error %s", rules.Name, err))
+			r.Recorder.Event(rules, "Warning", "not found", fmt.Sprintf("Rule %s has been not cleaned with error %s", rules.Name, err))
 			return r.handlingStatusRules(ctx, rules)
 		}
 
@@ -80,12 +80,12 @@ func (r *RulesReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl
 	}
 
 	if err := r.EnsureRules(ctx, rules); err != nil {
-		r.Recorder.Event(rules, "Warning", "Not Merged", fmt.Sprintf("Rule %s has been not merged with error %s", rules.Name, err))
+		r.Recorder.Event(rules, "Warning", "not merged", fmt.Sprintf("Rule %s has been not merged with error %s", rules.Name, err))
 		return r.handlingStatusRules(ctx, rules)
 	}
 
 	rules.Status.Merged = true
-	r.Recorder.Event(rules, "Normal", "Merged", fmt.Sprintf("Rule %s has been merged for SquidConfigs %s", rules.Name, rules.Spec.SquidConfig.Name))
+	r.Recorder.Event(rules, "Normal", "merged", fmt.Sprintf("Rule %s has been merged for SquidConfigs %s", rules.Name, rules.Spec.SquidConfig.Name))
 
 	return ctrl.Result{}, nil
 }

@@ -54,6 +54,10 @@ const (
 //+kubebuilder:rbac:groups=squid.cdk.clara.net,resources=configs/status,verbs=get;update;patch
 //+kubebuilder:rbac:groups=squid.cdk.clara.net,resources=configs/finalizers,verbs=update
 //+kubebuilder:rbac:groups=squid.cdk.clara.net,resources=rules/status,verbs=get
+//+kubebuilder:rbac:groups="",resources=configmaps,verbs=get;list;watch;create;update;patch;delete
+//+kubebuilder:rbac:groups=apps,resources=deployments,verbs=get;list;watch;create;update;patch;delete
+//+kubebuilder:rbac:groups="",resources=serviceaccounts,verbs=get;list;watch;create;update;patch;delete
+//+kubebuilder:rbac:groups="",resources=events,verbs=get;list;watch;create;update;patch;delete
 
 // For more details, check Reconcile and its Result here:
 // - https://pkg.go.dev/sigs.k8s.io/controller-runtime@v0.17.3/pkg/reconcile
@@ -78,13 +82,13 @@ func (r *ConfigsReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ct
 		}
 
 		if err := r.rollingUpdateDeployment(ctx, rules); err != nil {
-			r.Recorder.Event(configs, "Warning", "Not Merged", fmt.Sprintf("Rules with name %s couldn't be merged", rules.Name))
+			r.Recorder.Event(configs, "Warning", "not merged", fmt.Sprintf("Rules with name %s couldn't be merged", rules.Name))
 			configs.Status.ConfigMap = squidv1.PhaseError
 			configs.Status.Deployment = squidv1.PhaseError
 			return r.handlingConfigUpdate(ctx, configs)
 		}
 
-		r.Recorder.Event(configs, "Normal", "Merged", fmt.Sprintf("Rules with name %s is merged and applied", rules.Name))
+		r.Recorder.Event(configs, "Normal", "merged", fmt.Sprintf("Rules with name %s is merged and applied", rules.Name))
 		return ctrl.Result{}, err
 	}
 

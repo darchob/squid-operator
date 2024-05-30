@@ -19,7 +19,7 @@ func (r *RulesReconciler) handlingStatusRules(ctx context.Context, rules *squidv
 		log.Error(err, "failed to update status")
 		return ctrl.Result{
 			Requeue: true,
-		}, err
+		}, client.IgnoreNotFound(err)
 	}
 	log.Info("Updated status with merged true", "name", rules.Name)
 	return ctrl.Result{Requeue: false}, nil
