@@ -4,7 +4,7 @@ metadata:
   labels:
     app.kubernetes.io/name: squid-operator
     app.kubernetes.io/managed-by: kustomize
-  name: rules-sample
+  name: rules-first
   namespace: claranet-system
 spec:
   name: infra
@@ -15,22 +15,22 @@ spec:
     acl INFRA src 10.34.12.1
     acl src_port port 443
 ---
-apiVersion: squid.cdk.clara.net/v1
-kind: Rules
-metadata:
-  labels:
-    app.kubernetes.io/name: squid-operator
-    app.kubernetes.io/managed-by: kustomize
-  name: rules-sample-next
-  namespace: claranet-system
-spec:
-  name: infra
-  squidConfigRef:
-    name: internal-squid-next
-  rules: |
-    # INFRA RULES
-    acl INFRA src 10.34.12.2
-    acl src_port port 443
+# apiVersion: squid.cdk.clara.net/v1
+# kind: Rules
+# metadata:
+#   labels:
+#     app.kubernetes.io/name: squid-operator
+#     app.kubernetes.io/managed-by: kustomize
+#   name: rules-sample-next
+#   namespace: claranet-system
+# spec:
+#   name: infra
+#   squidConfigRef:
+#     name: internal-squid-next
+#   rules: |
+#     # INFRA RULES
+#     acl INFRA src 10.34.12.2
+#     acl dst_port port 443
 ---
 apiVersion: squid.cdk.clara.net/v1
 kind: Rules
@@ -38,7 +38,7 @@ metadata:
   labels:
     app.kubernetes.io/name: squid-operator
     app.kubernetes.io/managed-by: kustomize
-  name: rules-sample-two
+  name: rules-next
   namespace: claranet-system
 spec:
   name: infraTwo

@@ -4,7 +4,7 @@ image:
   repository: registry.fr.clara.net/claranet/healthcare/buildops/projects/kubernetes/operators/squid-operator/squid-operator
   pullPolicy: IfNotPresent
   # Overrides the image tag whose default is the chart appVersion.
-  tag: "9dd267c8"
+  tag: "445c2722"
 
 imagePullSecrets:
 - name: regcred-gitlab

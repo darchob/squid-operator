@@ -85,6 +85,10 @@ func (r *RulesReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl
 	}
 
 	rules.Status.Merged = true
+	if err := r.Update(ctx, rules); err != nil {
+		return r.handlingStatusRules(ctx, rules)
+	}
+
 	r.Recorder.Event(rules, "Normal", "merged", fmt.Sprintf("Rule %s has been merged for SquidConfigs %s", rules.Name, rules.Spec.SquidConfig.Name))
 
 	return ctrl.Result{}, nil
