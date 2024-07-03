@@ -1,0 +1,32 @@
+apiVersion: squid.cdk.clara.net/v1
+kind: SquidInstance
+metadata:
+  labels:
+    app.kubernetes.io/name: squid-operator
+    app.kubernetes.io/managed-by: kustomize
+  name: squidinstance-sample
+  namespace: healthcare-tools
+spec:
+  replicas: 3
+  image:
+    repository: ubuntu/squid
+    tag: latest
+
+  ingressSpec:
+    ingressClassName: nginx
+    rules:
+      - host: squid.adm.grita.fr
+        http:
+          paths:
+            - backend:
+              service:
+                name: squidinstance-sample
+                port:
+                  name: http
+              path: /
+              pathType: Prefix
+    tls:
+      - hosts:
+          - squid.adm.grita.fr
+        # TODO Get cert from Vault Hashi opts
+        secretName: squid-secret-tls

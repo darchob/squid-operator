@@ -4,24 +4,27 @@ kind: CustomResourceDefinition
 metadata:
   annotations:
     controller-gen.kubebuilder.io/version: v0.14.0
-  name: rules.squid.cdk.clara.net
+  name: squidconfigs.squid.cdk.clara.net
 spec:
   group: squid.cdk.clara.net
   names:
-    kind: Rules
-    listKind: RulesList
-    plural: rules
-    singular: rules
+    kind: SquidConfigs
+    listKind: SquidConfigsList
+    plural: squidconfigs
+    singular: squidconfigs
   scope: Namespaced
   versions:
   - additionalPrinterColumns:
     - jsonPath: .status.merged
       name: Merged
       type: boolean
+    - jsonPath: .status.apply
+      name: Applied
+      type: boolean
     name: v1
     schema:
       openAPIV3Schema:
-        description: Rules is the Schema for the rules API
+        description: SquidConfigs is the Schema for the squidconfigs API
         properties:
           apiVersion:
             description: |-
@@ -41,27 +44,18 @@ spec:
           metadata:
             type: object
           spec:
-            description: RulesSpec defines the desired state of Rules
+            description: SquidConfigsSpec defines the desired state of SquidConfigs
             properties:
-              name:
-                type: string
               rules:
                 type: string
-              squidConfigRef:
-                properties:
-                  name:
-                    type: string
-                required:
-                - name
-                type: object
             required:
-            - name
             - rules
-            - squidConfigRef
             type: object
           status:
-            description: RulesStatus defines the observed state of Rules
+            description: SquidConfigsStatus defines the observed state of SquidConfigs
             properties:
+              apply:
+                type: boolean
               merged:
                 type: boolean
             type: object

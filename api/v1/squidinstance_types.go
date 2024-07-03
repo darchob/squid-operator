@@ -32,6 +32,26 @@ const (
 	PhaseError    StatusPhase = "Error"
 )
 
+// SquidInstanceSpec defines the desired state of SquidInstance
+type SquidInstanceSpec struct {
+	// Specify the Squid instance replicas
+	Replicas *int32 `json:"replicas"`
+
+	HpaSpec autoscalingv1.HorizontalPodAutoscalerSpec `json:"hpaSpec,omitempty"`
+
+	// Specify the Squid ingress
+	IngressSpec networkingv1.IngressSpec `json:"ingressSpec"`
+
+	// Specify the Squid container image to use
+	Image Image `json:"image"`
+}
+
+// Defines the repository and tag image
+type JoinedConfig struct {
+	Version string `json:"version"`
+	Name    string `json:"name"`
+}
+
 // Defines the repository and tag image
 type Image struct {
 	// The image tag
@@ -40,56 +60,37 @@ type Image struct {
 	Repository string `json:"repository"`
 }
 
-// ConfigsSpec defines the desired state of Configs
-type ConfigsSpec struct {
-	// Defines how many pods must be deployed
-	Replicas *int32 `json:"replicas,omitempty"`
-	// Defines the Ingress Object from `networkingv1.Ingress` object
-	Ingress networkingv1.Ingress `json:"ingress,omitempty"`
-	// Defines the HPA Object from `autoscalingv1.HorizontalPodAutoscaler ` object
-	Hpa autoscalingv1.HorizontalPodAutoscaler `json:"hpa,omitempty"`
-	// Defines the Image Object
-	Image Image `json:"image,omitempty"`
-	// Defines the Squid Config as String
-	// squidConfig: |
-	//  # Example Config
-	//  http_port 3128
-	//  http_access allow localnet
-	//  http_access allow localhost
-	//  http_access deny all
-	SquidConfig string `json:"squidConfig"`
-}
-
-// ConfigsStatus defines the observed state of Configs
-type ConfigsStatus struct {
+// SquidInstanceStatus defines the observed state of SquidInstance
+type SquidInstanceStatus struct {
 	Deployment     StatusPhase `json:"deployment,omitempty"`
 	ConfigMap      StatusPhase `json:"configmap,omitempty"`
-	ServiceAccount StatusPhase `json:"ServiceAccount,omitempty"`
+	ServiceAccount StatusPhase `json:"serviceAccount,omitempty"`
 }
 
-// +kubebuilder:object:root=true
-// +kubebuilder:subresource:status
+//+kubebuilder:object:root=true
+//+kubebuilder:subresource:status
 // +kubebuilder:printcolumn:name="Deployment",type="string",JSONPath=".status.deployment"
 // +kubebuilder:printcolumn:name="ConfigMap",type="string",JSONPath=".status.configmap"
-// +kubebuilder:printcolumn:name="ServiceAccount",type="string",JSONPath=".status.ServiceAccount"
-// Configs is the Schema for the configs API
-type Configs struct {
+// +kubebuilder:printcolumn:name="ServiceAccount",type="string",JSONPath=".status.serviceAccount"
+
+// SquidInstance is the Schema for the squidinstances API
+type SquidInstance struct {
 	metav1.TypeMeta   `json:",inline"`
 	metav1.ObjectMeta `json:"metadata,omitempty"`
 
-	Spec   ConfigsSpec   `json:"spec,omitempty"`
-	Status ConfigsStatus `json:"status,omitempty"`
+	Spec   SquidInstanceSpec   `json:"spec,omitempty"`
+	Status SquidInstanceStatus `json:"status,omitempty"`
 }
 
 //+kubebuilder:object:root=true
 
-// ConfigsList contains a list of Configs
-type ConfigsList struct {
+// SquidInstanceList contains a list of SquidInstance
+type SquidInstanceList struct {
 	metav1.TypeMeta `json:",inline"`
 	metav1.ListMeta `json:"metadata,omitempty"`
-	Items           []Configs `json:"items"`
+	Items           []SquidInstance `json:"items"`
 }
 
 func init() {
-	SchemeBuilder.Register(&Configs{}, &ConfigsList{})
+	SchemeBuilder.Register(&SquidInstance{}, &SquidInstanceList{})
 }

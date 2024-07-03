@@ -1,0 +1,37 @@
+apiVersion: squid.cdk.clara.net/v1
+kind: SquidConfigs
+metadata:
+  labels:
+    app.kubernetes.io/name: squid-operator
+    app.kubernetes.io/managed-by: kustomize
+  annotations:
+    squid.ckd.clara.net/instance: squidinstance-sample
+  name: debian-default
+  namespace: healthcare-tools
+spec:
+  rules: |
+    #
+    # Squid configuration settings for Debian
+    #
+
+    # Logs are managed by logrotate on Debian
+    logfile_rotate 0
+
+    # For extra security Debian packages only allow
+    # localhost to use the proxy on new installs
+    #
+    http_access allow localnet
+---
+# apiVersion: squid.cdk.clara.net/v1
+# kind: SquidConfigs
+# metadata:
+#   labels:
+#     app.kubernetes.io/name: squid-operator
+#     app.kubernetes.io/managed-by: kustomize
+#   annotations:
+#     squid.ckd.clara.net/instance: squidinstance-sample
+#   name: rocky-default
+# spec:
+#   rules: |
+#     # Set max_filedescriptors to avoid using system's RLIMIT_NOFILE. See LP: #1978272
+#     max_filedescriptors 1024

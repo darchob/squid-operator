@@ -1,15 +1,16 @@
-# permissions for end users to view rules.
+# permissions for end users to view squidinstances.
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRole
 metadata:
   labels:
-    {{- include "squid-operator.labels" . | nindent 4 }}
-  name: {{ include "squid-operator.fullname" . }}-rules-viewer-role
+    app.kubernetes.io/name: squid-operator
+    app.kubernetes.io/managed-by: kustomize
+  name: squidinstance-viewer-role
 rules:
 - apiGroups:
   - squid.cdk.clara.net
   resources:
-  - rules
+  - squidinstances
   verbs:
   - get
   - list
@@ -17,6 +18,6 @@ rules:
 - apiGroups:
   - squid.cdk.clara.net
   resources:
-  - rules/status
+  - squidinstances/status
   verbs:
   - get

@@ -1,5 +1,5 @@
 # Image URL to use all building/pushing image targets
-IMG ?= registry.fr.clara.net/claranet/healthcare/buildops/projects/kubernetes/operators/squid-operator:latest
+IMG ?= controller:latest
 # ENVTEST_K8S_VERSION refers to the version of kubebuilder assets to be downloaded by envtest binary.
 ENVTEST_K8S_VERSION = 1.29.0
 
@@ -196,14 +196,3 @@ GOBIN=$(LOCALBIN) go install $${package} ;\
 mv "$$(echo "$(1)" | sed "s/-$(3)$$//")" $(1) ;\
 }
 endef
-
-init:
-	@mise install
-ifeq ($(GITLAB_CI),"true")
-	eval "$(mise env -s bash)"
-endif
-	@pre-commit install
-	@curl -L -o kubebuilder "https://go.kubebuilder.io/dl/latest/$(go env GOOS)/$(go env GOARCH)"
-	@chmod +x kubebuilder
-	@mv kubebuilder /usr/local/bin/
-	@go install golang.org/x/tools/cmd/goimports@latest

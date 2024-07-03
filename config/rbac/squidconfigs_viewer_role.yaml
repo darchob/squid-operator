@@ -1,27 +1,23 @@
-# permissions for end users to edit configs.
+# permissions for end users to view squidconfigs.
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRole
 metadata:
   labels:
     app.kubernetes.io/name: squid-operator
     app.kubernetes.io/managed-by: kustomize
-  name: configs-editor-role
+  name: squidconfigs-viewer-role
 rules:
 - apiGroups:
   - squid.cdk.clara.net
   resources:
-  - configs
+  - squidconfigs
   verbs:
-  - create
-  - delete
   - get
   - list
-  - patch
-  - update
   - watch
 - apiGroups:
   - squid.cdk.clara.net
   resources:
-  - configs/status
+  - squidconfigs/status
   verbs:
   - get

@@ -30,7 +30,7 @@ import (
 	squidv1 "git.fr.clara.net/claranet/healthcare/buildops/projects/kubernetes/operators/squid-operator/api/v1"
 )
 
-var _ = Describe("Rules Controller", func() {
+var _ = Describe("SquidInstance Controller", func() {
 	Context("When reconciling a resource", func() {
 		const resourceName = "test-resource"
 
@@ -40,13 +40,13 @@ var _ = Describe("Rules Controller", func() {
 			Name:      resourceName,
 			Namespace: "default", // TODO(user):Modify as needed
 		}
-		rules := &squidv1.Rules{}
+		squidinstance := &squidv1.SquidInstance{}
 
 		BeforeEach(func() {
-			By("creating the custom resource for the Kind Rules")
-			err := k8sClient.Get(ctx, typeNamespacedName, rules)
+			By("creating the custom resource for the Kind SquidInstance")
+			err := k8sClient.Get(ctx, typeNamespacedName, squidinstance)
 			if err != nil && errors.IsNotFound(err) {
-				resource := &squidv1.Rules{
+				resource := &squidv1.SquidInstance{
 					ObjectMeta: metav1.ObjectMeta{
 						Name:      resourceName,
 						Namespace: "default",
@@ -59,16 +59,16 @@ var _ = Describe("Rules Controller", func() {
 
 		AfterEach(func() {
 			// TODO(user): Cleanup logic after each test, like removing the resource instance.
-			resource := &squidv1.Rules{}
+			resource := &squidv1.SquidInstance{}
 			err := k8sClient.Get(ctx, typeNamespacedName, resource)
 			Expect(err).NotTo(HaveOccurred())
 
-			By("Cleanup the specific resource instance Rules")
+			By("Cleanup the specific resource instance SquidInstance")
 			Expect(k8sClient.Delete(ctx, resource)).To(Succeed())
 		})
 		It("should successfully reconcile the resource", func() {
 			By("Reconciling the created resource")
-			controllerReconciler := &RulesReconciler{
+			controllerReconciler := &SquidInstanceReconciler{
 				Client: k8sClient,
 				Scheme: k8sClient.Scheme(),
 			}

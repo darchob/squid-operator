@@ -5,7 +5,7 @@ import (
 	corev1 "k8s.io/api/core/v1"
 )
 
-func NewServiceAccount(sr *squidv1.Configs) *corev1.ServiceAccount {
+func NewServiceAccount(sr *squidv1.SquidInstance) *corev1.ServiceAccount {
 	return &corev1.ServiceAccount{
 		ObjectMeta: ObjectMeta(sr),
 		// ImagePullSecrets: ,

@@ -55,7 +55,7 @@ rules:
 - apiGroups:
   - squid.cdk.clara.net
   resources:
-  - configs
+  - squidconfigs
   verbs:
   - create
   - delete
@@ -67,13 +67,13 @@ rules:
 - apiGroups:
   - squid.cdk.clara.net
   resources:
-  - configs/finalizers
+  - squidconfigs/finalizers
   verbs:
   - update
 - apiGroups:
   - squid.cdk.clara.net
   resources:
-  - configs/status
+  - squidconfigs/status
   verbs:
   - get
   - patch
@@ -81,7 +81,7 @@ rules:
 - apiGroups:
   - squid.cdk.clara.net
   resources:
-  - rules
+  - squidinstances
   verbs:
   - create
   - delete
@@ -93,13 +93,13 @@ rules:
 - apiGroups:
   - squid.cdk.clara.net
   resources:
-  - rules/finalizers
+  - squidinstances/finalizers
   verbs:
   - update
 - apiGroups:
   - squid.cdk.clara.net
   resources:
-  - rules/status
+  - squidinstances/status
   verbs:
   - get
   - patch
