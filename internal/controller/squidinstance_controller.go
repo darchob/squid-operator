@@ -43,10 +43,6 @@ type SquidInstanceReconciler struct {
 	Recorder record.EventRecorder
 }
 
-const (
-	configMapField = "metadata.name"
-)
-
 //+kubebuilder:rbac:groups=squid.cdk.clara.net,resources=squidinstances,verbs=get;list;watch;create;update;patch;delete
 //+kubebuilder:rbac:groups=squid.cdk.clara.net,resources=squidinstances/status,verbs=get;update;patch
 //+kubebuilder:rbac:groups=squid.cdk.clara.net,resources=squidinstances/finalizers,verbs=update
