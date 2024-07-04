@@ -22,16 +22,17 @@ spec:
     #
     http_access allow localnet
 ---
-# apiVersion: squid.cdk.clara.net/v1
-# kind: SquidConfigs
-# metadata:
-#   labels:
-#     app.kubernetes.io/name: squid-operator
-#     app.kubernetes.io/managed-by: kustomize
-#   annotations:
-#     squid.ckd.clara.net/instance: squidinstance-sample
-#   name: rocky-default
-# spec:
-#   rules: |
-#     # Set max_filedescriptors to avoid using system's RLIMIT_NOFILE. See LP: #1978272
-#     max_filedescriptors 1024
+apiVersion: squid.cdk.clara.net/v1
+kind: SquidConfigs
+metadata:
+  labels:
+    app.kubernetes.io/name: squid-operator
+    app.kubernetes.io/managed-by: kustomize
+  annotations:
+    squid.ckd.clara.net/instance: squidinstance-sample
+  name: rocky-default
+  namespace: healthcare-tools
+spec:
+  rules: |
+    # Set max_filedescriptors to avoid using system's RLIMIT_NOFILE. See LP: #1978272
+    max_filedescriptors 1024

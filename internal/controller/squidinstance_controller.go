@@ -19,6 +19,7 @@ package controller
 import (
 	"context"
 	"fmt"
+	"reflect"
 
 	squidv1 "git.fr.clara.net/claranet/healthcare/buildops/projects/kubernetes/operators/squid-operator/api/v1"
 	squid "git.fr.clara.net/claranet/healthcare/buildops/projects/kubernetes/operators/squid-operator/pkg/squid"
@@ -83,6 +84,7 @@ func (r *SquidInstanceReconciler) Reconcile(ctx context.Context, req ctrl.Reques
 	}
 
 	if !squidInstance.ObjectMeta.DeletionTimestamp.IsZero() {
+		log.Info("resource deleting", "resource", req.NamespacedName)
 		if err := r.deletion(ctx, &squidInstance); err != nil {
 			return ctrl.Result{}, err
 		}
@@ -92,10 +94,12 @@ func (r *SquidInstanceReconciler) Reconcile(ctx context.Context, req ctrl.Reques
 
 	if err := r.create(ctx, &squidInstance); err != nil {
 		log.Error(err, "resource creating failed")
-		return ctrl.Result{}, err
+		squidInstance.Status.Health = squidv1.PhaseError
+		return r.handlingUpdate(ctx, &squidInstance)
 	}
 
-	return ctrl.Result{}, nil
+	squidInstance.Status.Health = squidv1.PhaseDone
+	return r.handlingUpdate(ctx, &squidInstance)
 }
 
 // SetupWithManager sets up the controller with the Manager.
@@ -105,17 +109,16 @@ func (r *SquidInstanceReconciler) SetupWithManager(mgr ctrl.Manager) error {
 		Owns(&appsv1.Deployment{}).
 		Owns(&corev1.ServiceAccount{}).
 		Owns(&corev1.ConfigMap{}).
-		WithEventFilter(
-			predicate.ResourceVersionChangedPredicate{}).
+		WithEventFilter(predicate.GenerationChangedPredicate{}).
 		Complete(r)
 }
 
-func (r *SquidInstanceReconciler) handlingUpdate(ctx context.Context, squidInstance *squidv1.SquidInstance) error {
+func (r *SquidInstanceReconciler) handlingUpdate(ctx context.Context, squidInstance *squidv1.SquidInstance) (ctrl.Result, error) {
 	if err := r.Status().Update(ctx, squidInstance); err != nil {
-		return err
+		return ctrl.Result{}, err
 	}
 
-	return nil
+	return ctrl.Result{Requeue: false}, nil
 }
 
 func (r *SquidInstanceReconciler) init(ctx context.Context, squidInstance *squidv1.SquidInstance) error {
@@ -141,6 +144,8 @@ func (r *SquidInstanceReconciler) deletion(ctx context.Context, squidInstance *s
 		&appsv1.Deployment{},
 		&corev1.ConfigMap{},
 		&corev1.ServiceAccount{},
+		&corev1.Service{},
+		&networkingv1.Ingress{},
 	}
 
 	for _, object := range objectsList {
@@ -166,168 +171,47 @@ func (r *SquidInstanceReconciler) deletion(ctx context.Context, squidInstance *s
 
 func (r *SquidInstanceReconciler) create(ctx context.Context, squidInstance *squidv1.SquidInstance) error {
 	log := log.Log.WithName("squidInstance")
-
 	log.Info("Reconcile", "creatOrUpdate", squidInstance.Name)
-	if err := r.serviceAccount(ctx, squidInstance); err != nil {
-		squidInstance.Status.ServiceAccount = squidv1.PhaseError
-		log.Error(err, "createOrUpdate", "sa", squidInstance.Name)
-		return r.handlingUpdate(ctx, squidInstance)
+
+	objectsList := []client.Object{
+		&appsv1.Deployment{},
+		&corev1.ConfigMap{},
+		&corev1.ServiceAccount{},
+		&corev1.Service{},
+		&networkingv1.Ingress{},
 	}
 
-	if err := r.configMap(ctx, squidInstance); err != nil {
-		squidInstance.Status.ConfigMap = squidv1.PhaseError
-		log.Error(err, "createOrUpdate", "configmap", squidInstance.Name)
-		return r.handlingUpdate(ctx, squidInstance)
-	}
+	for _, object := range objectsList {
+		if err := r.Get(ctx, client.ObjectKey{Namespace: squidInstance.Namespace, Name: squidInstance.Name}, object); err != nil {
+			if !errors.IsNotFound(err) {
+				return err
+			}
 
-	if err := r.deployment(ctx, squidInstance); err != nil {
-		squidInstance.Status.Deployment = squidv1.PhaseError
-		log.Error(err, "createOrUpdate", "deployment", squidInstance.Name)
-		return r.handlingUpdate(ctx, squidInstance)
-	}
+			switch object.(type) {
+			case *appsv1.Deployment:
+				object = squid.NewDeployment(squidInstance)
+			case *corev1.ConfigMap:
+				object = squid.ConfigMap(squidInstance)
+			case *corev1.ServiceAccount:
+				object = squid.NewServiceAccount(squidInstance)
+			case *corev1.Service:
+				object = squid.Service(squidInstance)
+			case *networkingv1.Ingress:
+				object = squid.Ingress(squidInstance)
+			}
 
-	if err := r.service(ctx, squidInstance); err != nil {
-		squidInstance.Status.Deployment = squidv1.PhaseError
-		log.Error(err, "createOrUpdate", "deployment", squidInstance.Name)
-		return r.handlingUpdate(ctx, squidInstance)
-	}
+			log.Info("Reconcile", "create", object.GetName())
+			if err := r.Create(ctx, object); err != nil {
+				log.Error(err, "createOrUpdate", reflect.TypeOf(object).String(), squidInstance.Name)
+				return err
+			}
 
-	if err := r.ingress(ctx, squidInstance); err != nil {
-		squidInstance.Status.Deployment = squidv1.PhaseError
-		log.Error(err, "createOrUpdate", "deployment", squidInstance.Name)
-		return r.handlingUpdate(ctx, squidInstance)
-	}
+			if err := controllerutil.SetControllerReference(squidInstance, object, r.Scheme); err != nil {
+				return err
+			}
 
-	squidInstance.Status.ServiceAccount = squidv1.PhaseDeployed
-	squidInstance.Status.ConfigMap = squidv1.PhaseDeployed
-	squidInstance.Status.Deployment = squidv1.PhaseDeployed
-
-	if err := r.Status().Update(ctx, squidInstance); err != nil {
-		return err
-	}
-
-	return nil
-}
-
-func (r *SquidInstanceReconciler) serviceAccount(ctx context.Context, instance *squidv1.SquidInstance) error {
-	sa := corev1.ServiceAccount{}
-	if err := r.Client.Get(ctx, client.ObjectKey{Namespace: instance.Namespace, Name: instance.Name}, &sa); err != nil {
-		if !errors.IsNotFound(err) {
-			return err
+			r.Recorder.Event(squidInstance, "Normal", "Deployed", fmt.Sprintf("%s %s has been deployed", reflect.TypeOf(object).String(), object.GetName()))
 		}
-
-		newSa := squid.NewServiceAccount(instance)
-		if err = r.Create(ctx, newSa); err != nil {
-			return err
-		}
-
-		if err := controllerutil.SetControllerReference(instance, newSa, r.Scheme); err != nil {
-			return err
-		}
-
-		r.Recorder.Event(instance, "Normal", "Deployed", fmt.Sprintf("ServiceAccount %s has been deployed", sa.Name))
-		return nil
-	}
-
-	return nil
-}
-
-func (r *SquidInstanceReconciler) deployment(ctx context.Context, instance *squidv1.SquidInstance) error {
-	log := log.Log.WithName("squidInstance")
-
-	deployment := appsv1.Deployment{}
-
-	if err := r.Get(ctx, client.ObjectKey{Namespace: instance.Namespace, Name: instance.Name}, &deployment); err != nil {
-		if !errors.IsNotFound(err) {
-			return err
-		}
-
-		newDeploy := squid.NewDeployment(instance)
-		if err = r.Create(ctx, newDeploy); err != nil {
-			log.Error(err, "unable to create new deployment")
-			return err
-		}
-
-		if err := controllerutil.SetControllerReference(instance, newDeploy, r.Scheme); err != nil {
-			return err
-		}
-
-		r.Recorder.Event(instance, "Normal", "Deployed", fmt.Sprintf("Deployment %s has been deployed", deployment.Name))
-		return nil
-	}
-
-	return nil
-}
-
-func (r *SquidInstanceReconciler) configMap(ctx context.Context, instance *squidv1.SquidInstance) error {
-	log := log.Log.WithName("squidInstance")
-
-	configmap := corev1.ConfigMap{}
-
-	if err := r.Client.Get(ctx, client.ObjectKey{Namespace: instance.Namespace, Name: instance.Name}, &configmap); err != nil {
-		if !errors.IsNotFound(err) {
-			return err
-		}
-
-		newConfigMap := squid.ConfigMap(instance)
-		if err = r.Create(ctx, newConfigMap); err != nil {
-			return err
-		}
-
-		if err := controllerutil.SetControllerReference(instance, newConfigMap, r.Scheme); err != nil {
-			return err
-		}
-
-		r.Recorder.Event(instance, "Normal", "Deployed", fmt.Sprintf("Secondary ConfigMap %s has been deployed", configmap.Name))
-	}
-
-	log.Info("update", "configmap", configmap.Name)
-
-	// This ConfigMap couldn't be updated see func : SetupWithManager(mgr ctrl.Manager)
-	return nil
-}
-
-func (r *SquidInstanceReconciler) service(ctx context.Context, instance *squidv1.SquidInstance) error {
-	svc := corev1.Service{}
-	if err := r.Client.Get(ctx, client.ObjectKey{Namespace: instance.Namespace, Name: instance.Name}, &svc); err != nil {
-		if !errors.IsNotFound(err) {
-			return err
-		}
-
-		newSvc := squid.Service(instance)
-		if err = r.Create(ctx, newSvc); err != nil {
-			return err
-		}
-
-		if err := controllerutil.SetControllerReference(instance, newSvc, r.Scheme); err != nil {
-			return err
-		}
-
-		r.Recorder.Event(instance, "Normal", "Deployed", fmt.Sprintf("Service %s has been deployed", svc.Name))
-		return nil
-	}
-
-	return nil
-}
-
-func (r *SquidInstanceReconciler) ingress(ctx context.Context, instance *squidv1.SquidInstance) error {
-	ing := networkingv1.Ingress{}
-	if err := r.Client.Get(ctx, client.ObjectKey{Namespace: instance.Namespace, Name: instance.Name}, &ing); err != nil {
-		if !errors.IsNotFound(err) {
-			return err
-		}
-
-		newIng := squid.Ingress(instance)
-		if err = r.Create(ctx, newIng); err != nil {
-			return err
-		}
-
-		if err := controllerutil.SetControllerReference(instance, newIng, r.Scheme); err != nil {
-			return err
-		}
-
-		r.Recorder.Event(instance, "Normal", "Deployed", fmt.Sprintf("Ingress %s has been deployed", ing.Name))
-		return nil
 	}
 
 	return nil

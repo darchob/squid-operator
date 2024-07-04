@@ -19,24 +19,20 @@ package controller
 import (
 	"context"
 	"fmt"
+	"reflect"
 	"time"
 
+	squidv1 "git.fr.clara.net/claranet/healthcare/buildops/projects/kubernetes/operators/squid-operator/api/v1"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
-	"k8s.io/apimachinery/pkg/fields"
+	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/runtime"
-	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/tools/record"
 	ctrl "sigs.k8s.io/controller-runtime"
-	"sigs.k8s.io/controller-runtime/pkg/builder"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
-	"sigs.k8s.io/controller-runtime/pkg/handler"
 	"sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/predicate"
-	"sigs.k8s.io/controller-runtime/pkg/reconcile"
-
-	squidv1 "git.fr.clara.net/claranet/healthcare/buildops/projects/kubernetes/operators/squid-operator/api/v1"
 )
 
 // SquidConfigsReconciler reconciles a SquidConfigs object
@@ -48,6 +44,8 @@ type SquidConfigsReconciler struct {
 
 var (
 	duplicateError = "dupplicate key found"
+	notFoundError  = "key not found"
+	emptyError     = "configmap is empty"
 )
 
 const (
@@ -61,6 +59,7 @@ const (
 
 //+kubebuilder:rbac:groups="",resources=events,verbs=get;list;watch;create;update;patch;delete
 //+kubebuilder:rbac:groups="",resources=configmaps,verbs=get;list;watch;create;update;patch;delete
+//+kubebuilder:rbac:groups=apps,resources=deployment,verbs=get;list;watch;create;update;patch;delete
 
 // Reconcile is part of the main kubernetes reconciliation loop which aims to
 // move the current state of the cluster closer to the desired state.
@@ -86,27 +85,106 @@ func (r *SquidConfigsReconciler) Reconcile(ctx context.Context, req ctrl.Request
 	}
 
 	if !squidConfig.ObjectMeta.DeletionTimestamp.IsZero() {
+		log.Info("resource deleting", "resource", req.NamespacedName)
 		if err := r.deletion(ctx, &squidConfig); err != nil {
+			if errors.IsConflict(err) {
+				return r.handlingRequeuUpdate(ctx, &squidConfig)
+			}
+
+			if isEmptyErr(err) {
+				return ctrl.Result{}, nil
+			}
+
+			if isNotFoundErr(err) {
+				return ctrl.Result{}, nil
+			}
+
 			return ctrl.Result{}, err
 		}
 
 		return ctrl.Result{}, nil
 	}
 
-	if err := r.Get(ctx, req.NamespacedName, &squidConfig); err != nil {
-		log.Error(err, "unable to fetch SquidConfig")
-		return ctrl.Result{}, client.IgnoreNotFound(err)
+	if err := r.configMapUpgrade(ctx, &squidConfig); err != nil {
+		squidConfig.Status.Apply = false
+		if errors.IsConflict(err) {
+			return r.handlingRequeuUpdate(ctx, &squidConfig)
+		}
+
+		if !isDuplicateErr(err) {
+			return r.handlingUpdate(ctx, &squidConfig)
+		}
 	}
 
-	if err := r.handlingConfigMapUpgrade(ctx, &squidConfig); err != nil {
-		if isDuplicateErr(err) {
-			return ctrl.Result{}, nil
-		}
-		log.Error(err, "unable to update configmap")
+	squidConfig.Status.Apply = true
+	return r.handlingUpdate(ctx, &squidConfig)
+}
+
+// SetupWithManager sets up the controller with the Manager.
+func (r *SquidConfigsReconciler) SetupWithManager(mgr ctrl.Manager) error {
+	return ctrl.NewControllerManagedBy(mgr).
+		For(&squidv1.SquidConfigs{}).
+		// WithEventFilter(predicate.ResourceVersionChangedPredicate{}).
+		WithEventFilter(predicate.GenerationChangedPredicate{}).
+		Complete(r)
+}
+
+func (r *SquidConfigsReconciler) handlingRequeuUpdate(ctx context.Context, configs *squidv1.SquidConfigs) (ctrl.Result, error) {
+	if err := r.Status().Update(ctx, configs); err != nil {
 		return ctrl.Result{}, err
 	}
 
-	return ctrl.Result{}, nil
+	return ctrl.Result{Requeue: true}, nil
+}
+
+func (r *SquidConfigsReconciler) handlingUpdate(ctx context.Context, configs *squidv1.SquidConfigs) (ctrl.Result, error) {
+	if err := r.Status().Update(ctx, configs); err != nil {
+		return ctrl.Result{}, err
+	}
+
+	return ctrl.Result{Requeue: false}, nil
+}
+
+func (r *SquidConfigsReconciler) configMapUpgrade(ctx context.Context, configs *squidv1.SquidConfigs) error {
+	_ = log.Log.WithName("squidConfigs")
+
+	objectsList := []client.Object{
+		&appsv1.Deployment{},
+		&corev1.ConfigMap{},
+	}
+
+	configMapName := configs.GetAnnotations()["squid.ckd.clara.net/instance"]
+	for _, object := range objectsList {
+		if err := r.Get(ctx, client.ObjectKey{Namespace: configs.Namespace, Name: configMapName}, object); err != nil {
+			return err
+		}
+
+		switch obj := object.(type) {
+		case *corev1.ConfigMap:
+			if obj.Data == nil {
+				obj.Data = make(map[string]string)
+			}
+
+			dataKey := fmt.Sprintf("%s.conf", configs.Name)
+			_, ok := obj.Data[dataKey]
+			if ok {
+				return fmt.Errorf(duplicateError)
+			}
+
+			obj.Data[dataKey] = configs.Spec.Rules
+
+		case *appsv1.Deployment:
+			obj.Spec.Template.ObjectMeta.Annotations["squid-operator.kubernetes.io/restartedAt"] = time.Now().Format(time.RFC3339)
+		}
+
+		if err := r.Update(ctx, object); err != nil {
+			return err
+		}
+
+		r.Recorder.Event(configs, "Normal", "Updated", fmt.Sprintf("%s %s has been updated", reflect.TypeOf(object).String(), object.GetName()))
+	}
+
+	return nil
 }
 
 func (r *SquidConfigsReconciler) init(ctx context.Context, squidConfigs *squidv1.SquidConfigs) error {
@@ -126,38 +204,41 @@ func (r *SquidConfigsReconciler) init(ctx context.Context, squidConfigs *squidv1
 func (r *SquidConfigsReconciler) deletion(ctx context.Context, configs *squidv1.SquidConfigs) error {
 	log := log.Log.WithName("squidConfigs")
 
-	log.Info("Reconcile", "deletion", configs.Name)
-	configmap := corev1.ConfigMap{}
-	deployment := appsv1.Deployment{}
+	objectsList := []client.Object{
+		&appsv1.Deployment{},
+		&corev1.ConfigMap{},
+	}
 
 	configMapName := configs.GetAnnotations()["squid.ckd.clara.net/instance"]
+	for _, object := range objectsList {
+		if err := r.Get(ctx, client.ObjectKey{Namespace: configs.Namespace, Name: configMapName}, object); err != nil {
+			return err
+		}
 
-	if err := r.Get(ctx, client.ObjectKey{Namespace: configs.Namespace, Name: configMapName}, &configmap); err != nil {
-		return client.IgnoreNotFound(err)
-	}
+		switch obj := object.(type) {
+		case *corev1.ConfigMap:
+			if obj.Data == nil {
+				err := fmt.Errorf(emptyError)
+				log.Error(err, "deletion", configs.Name)
+				return err
+			}
 
-	if err := r.Get(ctx, client.ObjectKey{Namespace: configs.Namespace, Name: configMapName}, &deployment); err != nil {
-		return err
-	}
+			dataKey := fmt.Sprintf("%s.conf", configs.Name)
+			_, ok := obj.Data[dataKey]
+			if !ok {
+				err := fmt.Errorf(notFoundError)
+				log.Error(err, "deletion", configs.Name)
+				return err
+			}
 
-	if configmap.Data == nil {
-		return fmt.Errorf("empty configmap")
-	}
+			delete(obj.Data, dataKey)
+		case *appsv1.Deployment:
+			obj.Spec.Template.ObjectMeta.Annotations["squid-operator.kubernetes.io/restartedAt"] = time.Now().Format(time.RFC3339)
+		}
 
-	dataKey := fmt.Sprintf("%s.conf", configs.Name)
-	_, ok := configmap.Data[dataKey]
-	if !ok {
-		return fmt.Errorf("key not found")
-	}
-	delete(configmap.Data, dataKey)
-
-	if err := r.Update(ctx, &configmap); err != nil {
-		return err
-	}
-
-	deployment.Spec.Template.ObjectMeta.Annotations["squid-operator.kubernetes.io/restartedAt"] = time.Now().Format(time.RFC3339)
-	if err := r.Update(ctx, &deployment); err != nil {
-		return err
+		if err := r.Update(ctx, object); err != nil {
+			return err
+		}
 	}
 
 	configs.ObjectMeta.Finalizers = []string{}
@@ -169,110 +250,14 @@ func (r *SquidConfigsReconciler) deletion(ctx context.Context, configs *squidv1.
 	return nil
 }
 
-// SetupWithManager sets up the controller with the Manager.
-func (r *SquidConfigsReconciler) SetupWithManager(mgr ctrl.Manager) error {
-	log := log.Log.WithName("squidConfigs")
-
-	if err := mgr.GetFieldIndexer().IndexField(context.Background(), &squidv1.SquidConfigs{}, configField, func(rawObj client.Object) []string {
-		// Extract the ConfigMap name from the config Spec, if one is provided
-		config := rawObj.(*squidv1.SquidConfigs)
-		if config.GetAnnotations()["squid.ckd.clara.net/instance"] == "" {
-			return nil
-		}
-		return []string{config.GetAnnotations()["squid.ckd.clara.net/instance"]}
-	}); err != nil {
-		log.Error(err, "Indexer", "indexing configs")
-		return err
-	}
-
-	return ctrl.NewControllerManagedBy(mgr).
-		For(&squidv1.SquidConfigs{}).
-		Watches(
-			&corev1.ConfigMap{},
-			handler.EnqueueRequestsFromMapFunc(r.findConfigMapByName),
-			builder.WithPredicates(predicate.ResourceVersionChangedPredicate{}),
-		).
-		Complete(r)
-}
-
-func (r *SquidConfigsReconciler) findConfigMapByName(ctx context.Context, configMap client.Object) []reconcile.Request {
-	log := log.Log.WithName("SquidConfigs")
-
-	attachedConfigsList := &squidv1.SquidConfigsList{}
-	listOps := &client.ListOptions{
-		FieldSelector: fields.OneTermEqualSelector(configField, configMap.GetName()),
-		Namespace:     configMap.GetNamespace(),
-	}
-
-	err := r.List(ctx, attachedConfigsList, listOps)
-	if err != nil {
-		log.Error(err, "list")
-		return []reconcile.Request{}
-	}
-
-	requests := make([]reconcile.Request, len(attachedConfigsList.Items))
-	for i, item := range attachedConfigsList.Items {
-		requests[i] = reconcile.Request{
-			NamespacedName: types.NamespacedName{
-				Name:      item.GetName(),
-				Namespace: item.GetNamespace(),
-			},
-		}
-	}
-	return requests
-}
-
-func (r *SquidConfigsReconciler) handlingConfigMapUpgrade(ctx context.Context, configs *squidv1.SquidConfigs) error {
-	_ = log.FromContext(ctx)
-
-	configmap := corev1.ConfigMap{}
-	deployment := appsv1.Deployment{}
-
-	configMapName := configs.GetAnnotations()["squid.ckd.clara.net/instance"]
-
-	if err := r.Client.Get(ctx, client.ObjectKey{Namespace: configs.Namespace, Name: configMapName}, &configmap); err != nil {
-		return client.IgnoreNotFound(err)
-	}
-
-	if err := r.Get(ctx, client.ObjectKey{Namespace: configs.Namespace, Name: configMapName}, &deployment); err != nil {
-		return err
-	}
-
-	if configmap.Data == nil {
-		configmap.Data = make(map[string]string)
-	}
-
-	dataKey := fmt.Sprintf("%s.conf", configs.Name)
-	_, ok := configmap.Data[dataKey]
-	if ok {
-		return fmt.Errorf("dupplicate key found")
-	}
-
-	configmap.Data[dataKey] = configs.Spec.Rules
-
-	if err := r.Update(ctx, &configmap); err != nil {
-		return err
-	}
-
-	// if err := controllerutil.SetControllerReference(configs, &configmap, r.Scheme); err != nil {
-	// 	return err
-	// }
-
-	deployment.Spec.Template.ObjectMeta.Annotations["squid-operator.kubernetes.io/restartedAt"] = time.Now().Format(time.RFC3339)
-	if err := r.Update(ctx, &deployment); err != nil {
-		return err
-	}
-
-	configs.Status.Merged = true
-	if err := r.Status().Update(ctx, configs); err != nil {
-		return err
-	}
-
-	r.Recorder.Event(&configmap, "Normal", "Updated", fmt.Sprintf("ConfigMap %s has been updated", configmap.Name))
-
-	return nil
-}
-
 func isDuplicateErr(err error) bool {
 	return err.Error() == duplicateError
+}
+
+func isNotFoundErr(err error) bool {
+	return err.Error() == notFoundError
+}
+
+func isEmptyErr(err error) bool {
+	return err.Error() == emptyError
 }

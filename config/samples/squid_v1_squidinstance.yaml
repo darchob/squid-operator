@@ -19,10 +19,10 @@ spec:
         http:
           paths:
             - backend:
-              service:
-                name: squidinstance-sample
-                port:
-                  name: http
+                service:
+                  name: squidinstance-sample
+                  port:
+                    name: http
               path: /
               pathType: Prefix
     tls:

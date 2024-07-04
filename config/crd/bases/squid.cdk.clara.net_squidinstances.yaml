@@ -15,14 +15,8 @@ spec:
   scope: Namespaced
   versions:
   - additionalPrinterColumns:
-    - jsonPath: .status.deployment
-      name: Deployment
-      type: string
-    - jsonPath: .status.configmap
-      name: ConfigMap
-      type: string
-    - jsonPath: .status.serviceAccount
-      name: ServiceAccount
+    - jsonPath: .status.health
+      name: Health
       type: string
     name: v1
     schema:
@@ -377,15 +371,15 @@ spec:
                 description: Specify the Squid instance replicas
                 format: int32
                 type: integer
+            required:
+            - image
+            - ingressSpec
+            - replicas
             type: object
           status:
             description: SquidInstanceStatus defines the observed state of SquidInstance
             properties:
-              configmap:
-                type: string
-              deployment:
-                type: string
-              serviceAccount:
+              health:
                 type: string
             type: object
         type: object

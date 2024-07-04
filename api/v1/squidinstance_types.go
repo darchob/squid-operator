@@ -62,16 +62,12 @@ type Image struct {
 
 // SquidInstanceStatus defines the observed state of SquidInstance
 type SquidInstanceStatus struct {
-	Deployment     StatusPhase `json:"deployment,omitempty"`
-	ConfigMap      StatusPhase `json:"configmap,omitempty"`
-	ServiceAccount StatusPhase `json:"serviceAccount,omitempty"`
+	Health StatusPhase `json:"health,omitempty"`
 }
 
 //+kubebuilder:object:root=true
 //+kubebuilder:subresource:status
-// +kubebuilder:printcolumn:name="Deployment",type="string",JSONPath=".status.deployment"
-// +kubebuilder:printcolumn:name="ConfigMap",type="string",JSONPath=".status.configmap"
-// +kubebuilder:printcolumn:name="ServiceAccount",type="string",JSONPath=".status.serviceAccount"
+// +kubebuilder:printcolumn:name="Health",type="string",JSONPath=".status.health"
 
 // SquidInstance is the Schema for the squidinstances API
 type SquidInstance struct {
