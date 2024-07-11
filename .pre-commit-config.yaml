@@ -9,7 +9,7 @@ repos:
       - id: check-json
       - id: check-case-conflict
       - id: check-yaml
-        exclude: ^deployment/
+        exclude: ^deploy/
         args:
           - --unsafe
       - id: check-symlinks

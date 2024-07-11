@@ -31,7 +31,31 @@ rules:
 - apiGroups:
   - ""
   resources:
+  - service
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
+  - ""
+  resources:
   - serviceaccounts
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
+  - apps
+  resources:
+  - deployment
   verbs:
   - create
   - delete
@@ -53,9 +77,9 @@ rules:
   - update
   - watch
 - apiGroups:
-  - squid.cdk.clara.net
+  - networking
   resources:
-  - configs
+  - ingress
   verbs:
   - create
   - delete
@@ -67,21 +91,7 @@ rules:
 - apiGroups:
   - squid.cdk.clara.net
   resources:
-  - configs/finalizers
-  verbs:
-  - update
-- apiGroups:
-  - squid.cdk.clara.net
-  resources:
-  - configs/status
-  verbs:
-  - get
-  - patch
-  - update
-- apiGroups:
-  - squid.cdk.clara.net
-  resources:
-  - rules
+  - squidconfigs
   verbs:
   - create
   - delete
@@ -93,13 +103,39 @@ rules:
 - apiGroups:
   - squid.cdk.clara.net
   resources:
-  - rules/finalizers
+  - squidconfigs/finalizers
   verbs:
   - update
 - apiGroups:
   - squid.cdk.clara.net
   resources:
-  - rules/status
+  - squidconfigs/status
+  verbs:
+  - get
+  - patch
+  - update
+- apiGroups:
+  - squid.cdk.clara.net
+  resources:
+  - squidinstances
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
+  - squid.cdk.clara.net
+  resources:
+  - squidinstances/finalizers
+  verbs:
+  - update
+- apiGroups:
+  - squid.cdk.clara.net
+  resources:
+  - squidinstances/status
   verbs:
   - get
   - patch

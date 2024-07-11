@@ -35,6 +35,7 @@ Common labels
 */}}
 {{- define "squid-operator.labels" -}}
 helm.sh/chart: {{ include "squid-operator.chart" . }}
+app.kubernetes.io/name: {{ include "squid-operator.fullname" . }}-squid-operator
 {{ include "squid-operator.selectorLabels" . }}
 {{- if .Chart.AppVersion }}
 app.kubernetes.io/version: {{ .Chart.AppVersion | quote }}

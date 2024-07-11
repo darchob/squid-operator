@@ -1,15 +1,15 @@
-# permissions for end users to edit rules.
+# permissions for end users to edit squidinstances.
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRole
 metadata:
+  name: {{ include "squid-operator.fullname" . }}-squidinstance-editor-role
   labels:
     {{- include "squid-operator.labels" . | nindent 4 }}
-  name: {{ include "squid-operator.fullname" . }}-rules-editor-role
 rules:
 - apiGroups:
   - squid.cdk.clara.net
   resources:
-  - rules
+  - squidinstances
   verbs:
   - create
   - delete
@@ -21,6 +21,6 @@ rules:
 - apiGroups:
   - squid.cdk.clara.net
   resources:
-  - rules/status
+  - squidinstances/status
   verbs:
   - get

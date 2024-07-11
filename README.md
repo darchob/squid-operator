@@ -1,6 +1,7 @@
 # squid-operator
+// TODO(user): Add simple overview of use/purpose
 
-On configMap change RollingUpdate Deployment
+1 - Instance with own configmap whoo include not owned includers configmap
 
 ## Description
 // TODO(user): An in-depth paragraph about your project and overview of use

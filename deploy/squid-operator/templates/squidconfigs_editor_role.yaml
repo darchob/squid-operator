@@ -1,16 +1,15 @@
-# permissions for end users to edit rules.
+# permissions for end users to edit squidconfigs.
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRole
 metadata:
   labels:
-    app.kubernetes.io/name: squid-operator
-    app.kubernetes.io/managed-by: kustomize
-  name: rules-editor-role
+    {{- include "squid-operator.labels" . | nindent 4 }}
+  name: {{ include "squid-operator.fullname" . }}-configs-editor-role
 rules:
 - apiGroups:
   - squid.cdk.clara.net
   resources:
-  - rules
+  - squidconfigs
   verbs:
   - create
   - delete
@@ -22,6 +21,6 @@ rules:
 - apiGroups:
   - squid.cdk.clara.net
   resources:
-  - rules/status
+  - squidconfigs/status
   verbs:
   - get

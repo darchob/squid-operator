@@ -20,7 +20,7 @@ func UpdatedDeployment(current *appsv1.Deployment) error {
 	return nil
 }
 
-func NewDeployment(sr *squidv1.Configs) *appsv1.Deployment {
+func NewDeployment(sr *squidv1.SquidInstance) *appsv1.Deployment {
 	return &appsv1.Deployment{
 		ObjectMeta: ObjectMeta(sr),
 		Spec: appsv1.DeploymentSpec{
@@ -34,7 +34,7 @@ func NewDeployment(sr *squidv1.Configs) *appsv1.Deployment {
 					ServiceAccountName: sr.Name,
 					Volumes: []corev1.Volume{
 						{
-							Name: fmt.Sprintf("%s-config", sr.Name),
+							Name: "configs",
 							VolumeSource: corev1.VolumeSource{
 								ConfigMap: &corev1.ConfigMapVolumeSource{
 									LocalObjectReference: corev1.LocalObjectReference{
@@ -51,9 +51,8 @@ func NewDeployment(sr *squidv1.Configs) *appsv1.Deployment {
 							ImagePullPolicy: corev1.PullAlways,
 							VolumeMounts: []corev1.VolumeMount{
 								{
-									Name:      fmt.Sprintf("%s-config", sr.Name),
-									MountPath: "/etc/squid/squid.conf",
-									SubPath:   "squid.conf",
+									Name:      "configs",
+									MountPath: "/etc/squid/conf.d/",
 								},
 							},
 							Ports: []corev1.ContainerPort{

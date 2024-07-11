@@ -122,20 +122,20 @@ func main() {
 		os.Exit(1)
 	}
 
-	if err = (&controller.ConfigsReconciler{
+	if err = (&controller.SquidInstanceReconciler{
 		Client:   mgr.GetClient(),
 		Scheme:   mgr.GetScheme(),
-		Recorder: mgr.GetEventRecorderFor("SquidConfigs"),
+		Recorder: mgr.GetEventRecorderFor("squidInstances"),
 	}).SetupWithManager(mgr); err != nil {
-		setupLog.Error(err, "unable to create controller", "controller", "Configs")
+		setupLog.Error(err, "unable to create controller", "controller", "SquidInstance")
 		os.Exit(1)
 	}
-	if err = (&controller.RulesReconciler{
+	if err = (&controller.SquidConfigsReconciler{
 		Client:   mgr.GetClient(),
 		Scheme:   mgr.GetScheme(),
-		Recorder: mgr.GetEventRecorderFor("SquidRules"),
+		Recorder: mgr.GetEventRecorderFor("squidConfigs"),
 	}).SetupWithManager(mgr); err != nil {
-		setupLog.Error(err, "unable to create controller", "controller", "Rules")
+		setupLog.Error(err, "unable to create controller", "controller", "SquidConfigs")
 		os.Exit(1)
 	}
 	//+kubebuilder:scaffold:builder

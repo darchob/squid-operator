@@ -8,7 +8,17 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
-func Labels(sr *squidv1.Configs) map[string]string {
+const (
+	DuplicateError = "found duplicate rule : "
+
+//	defaultData    = `
+//
+// include /etc/squid/squid.d/*.conf
+// cache_dir ufs $prefix/var/cache 100 16 256
+// `
+)
+
+func Labels(sr *squidv1.SquidInstance) map[string]string {
 	return map[string]string{
 		"app.kubernetes.io/name":       sr.Name,
 		"app.kubernetes.io/version":    sr.Spec.Image.Tags,
@@ -23,7 +33,7 @@ func Annotations() map[string]string {
 	}
 }
 
-func ObjectMeta(sr *squidv1.Configs) metav1.ObjectMeta {
+func ObjectMeta(sr *squidv1.SquidInstance) metav1.ObjectMeta {
 	return metav1.ObjectMeta{
 		Name:        sr.Name,
 		Namespace:   sr.Namespace,
