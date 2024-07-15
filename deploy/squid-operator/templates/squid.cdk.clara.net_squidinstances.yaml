@@ -371,10 +371,13 @@ spec:
                 description: Specify the Squid instance replicas
                 format: int32
                 type: integer
+              storageClassName:
+                type: string
             required:
             - image
             - ingressSpec
             - replicas
+            - storageClassName
             type: object
           status:
             description: SquidInstanceStatus defines the observed state of SquidInstance
