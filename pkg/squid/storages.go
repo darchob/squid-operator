@@ -5,6 +5,7 @@ import (
 
 	squidv1 "git.fr.clara.net/claranet/healthcare/buildops/projects/kubernetes/operators/squid-operator/api/v1"
 	corev1 "k8s.io/api/core/v1"
+	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
@@ -30,6 +31,11 @@ func PersistentVolumeClaim(sr *squidv1.SquidInstance) *corev1.PersistentVolumeCl
 				MatchLabels: Labels(sr),
 			},
 			StorageClassName: &sr.Spec.StorageClassName,
+			Resources: corev1.VolumeResourceRequirements{
+				Requests: corev1.ResourceList{
+					corev1.ResourceName(corev1.ResourceStorage): resource.MustParse("10Gi"),
+				},
+			},
 		},
 	}
 }

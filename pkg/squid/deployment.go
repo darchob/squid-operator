@@ -14,7 +14,7 @@ import (
 func UpdatedDeployment(current *appsv1.Deployment) error {
 	_, ok := current.Annotations["date"]
 	if !ok {
-		return fmt.Errorf("No way to perform RollingUpdate the date Label is not found")
+		return fmt.Errorf("no way to perform RollingUpdate the date Label is not found")
 	}
 	current.Annotations["date"] = time.DateTime
 	return nil
