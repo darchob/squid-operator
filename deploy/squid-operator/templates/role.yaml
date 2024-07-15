@@ -80,7 +80,7 @@ rules:
 - apiGroups:
   - networking
   resources:
-  - ingress
+  - ingresses
   verbs:
   - create
   - delete
