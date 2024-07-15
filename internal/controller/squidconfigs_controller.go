@@ -104,6 +104,7 @@ func (r *SquidConfigsReconciler) Reconcile(ctx context.Context, req ctrl.Request
 				return ctrl.Result{}, nil
 			}
 
+			log.Error(err, "unknow", "configs", squidConfig.Name)
 			return ctrl.Result{}, err
 		}
 
