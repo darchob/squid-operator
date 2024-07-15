@@ -90,16 +90,19 @@ func (r *SquidConfigsReconciler) Reconcile(ctx context.Context, req ctrl.Request
 		log.Info("resource deleting", "resource", req.NamespacedName)
 		if err := r.deletion(ctx, &squidConfig); err != nil {
 			if errors.IsConflict(err) {
+				log.Error(err, "couldn't delete", "configs", squidConfig.Name)
 				return r.handlingRequeuUpdate(ctx, &squidConfig)
 			}
 
-			// if isEmptyErr(err) {
-			// 	return ctrl.Result{}, nil
-			// }
+			if isEmptyErr(err) {
+				log.Error(err, "empty", "configs", squidConfig.Name)
+				return ctrl.Result{}, nil
+			}
 
-			// if isNotFoundErr(err) {
-			// 	return ctrl.Result{}, nil
-			// }
+			if isNotFoundErr(err) {
+				log.Error(err, "not found", "configs", squidConfig.Name)
+				return ctrl.Result{}, nil
+			}
 
 			return ctrl.Result{}, err
 		}
