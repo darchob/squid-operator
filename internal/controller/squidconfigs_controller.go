@@ -93,13 +93,13 @@ func (r *SquidConfigsReconciler) Reconcile(ctx context.Context, req ctrl.Request
 				return r.handlingRequeuUpdate(ctx, &squidConfig)
 			}
 
-			if isEmptyErr(err) {
-				return ctrl.Result{}, nil
-			}
+			// if isEmptyErr(err) {
+			// 	return ctrl.Result{}, nil
+			// }
 
-			if isNotFoundErr(err) {
-				return ctrl.Result{}, nil
-			}
+			// if isNotFoundErr(err) {
+			// 	return ctrl.Result{}, nil
+			// }
 
 			return ctrl.Result{}, err
 		}
