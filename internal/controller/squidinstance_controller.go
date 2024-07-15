@@ -33,7 +33,6 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 	"sigs.k8s.io/controller-runtime/pkg/log"
-	"sigs.k8s.io/controller-runtime/pkg/predicate"
 )
 
 // SquidInstanceReconciler reconciles a SquidInstance object
@@ -105,7 +104,8 @@ func (r *SquidInstanceReconciler) SetupWithManager(mgr ctrl.Manager) error {
 		Owns(&appsv1.Deployment{}).
 		Owns(&corev1.ServiceAccount{}).
 		Owns(&corev1.ConfigMap{}).
-		WithEventFilter(predicate.GenerationChangedPredicate{}).
+		Owns(&networkingv1.Ingress{}).
+		// WithEventFilter(predicate.GenerationChangedPredicate{}).
 		Complete(r)
 }
 
@@ -150,7 +150,6 @@ func (r *SquidInstanceReconciler) deletion(ctx context.Context, squidInstance *s
 		}
 
 		log.Info("Reconcile", "deletion", object.GetName())
-
 		if err := r.Delete(ctx, object); err != nil {
 			return err
 		}
