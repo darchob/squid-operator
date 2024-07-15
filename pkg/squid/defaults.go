@@ -56,6 +56,7 @@ func ObjectMeta(obj interface{}) *metav1.ObjectMeta {
 					Name:       sr.Name,
 					Kind:       sr.Kind,
 					APIVersion: sr.APIVersion,
+					UID:        sr.UID,
 				},
 			},
 		}
@@ -70,6 +71,7 @@ func ObjectMeta(obj interface{}) *metav1.ObjectMeta {
 					Name:       sr.Name,
 					Kind:       sr.Kind,
 					APIVersion: sr.APIVersion,
+					UID:        sr.UID,
 				},
 			},
 		}

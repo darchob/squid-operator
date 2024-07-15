@@ -29,7 +29,12 @@ func NewDeployment(sr *squidv1.SquidInstance) *appsv1.Deployment {
 				MatchLabels: Labels(sr),
 			},
 			Template: corev1.PodTemplateSpec{
-				ObjectMeta: *ObjectMeta(sr),
+				ObjectMeta: metav1.ObjectMeta{
+					Name:        sr.Name,
+					Namespace:   sr.Namespace,
+					Labels:      Labels(sr),
+					Annotations: Annotations(),
+				},
 				Spec: corev1.PodSpec{
 					ServiceAccountName: sr.Name,
 					Volumes: []corev1.Volume{
