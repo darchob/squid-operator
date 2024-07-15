@@ -39,5 +39,12 @@ func ObjectMeta(sr *squidv1.SquidInstance) metav1.ObjectMeta {
 		Namespace:   sr.Namespace,
 		Labels:      Labels(sr),
 		Annotations: Annotations(),
+		OwnerReferences: []metav1.OwnerReference{
+			{
+				Name:       sr.Name,
+				Kind:       sr.Kind,
+				APIVersion: sr.APIVersion,
+			},
+		},
 	}
 }
