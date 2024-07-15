@@ -7,7 +7,7 @@ import (
 
 func NewServiceAccount(sr *squidv1.SquidInstance) *corev1.ServiceAccount {
 	return &corev1.ServiceAccount{
-		ObjectMeta: ObjectMeta(sr),
+		ObjectMeta: *ObjectMeta(sr),
 		// ImagePullSecrets: ,
 	}
 }

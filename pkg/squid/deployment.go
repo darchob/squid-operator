@@ -22,14 +22,14 @@ func UpdatedDeployment(current *appsv1.Deployment) error {
 
 func NewDeployment(sr *squidv1.SquidInstance) *appsv1.Deployment {
 	return &appsv1.Deployment{
-		ObjectMeta: ObjectMeta(sr),
+		ObjectMeta: *ObjectMeta(sr),
 		Spec: appsv1.DeploymentSpec{
 			Replicas: sr.Spec.Replicas,
 			Selector: &metav1.LabelSelector{
 				MatchLabels: Labels(sr),
 			},
 			Template: corev1.PodTemplateSpec{
-				ObjectMeta: ObjectMeta(sr),
+				ObjectMeta: *ObjectMeta(sr),
 				Spec: corev1.PodSpec{
 					ServiceAccountName: sr.Name,
 					Volumes: []corev1.Volume{

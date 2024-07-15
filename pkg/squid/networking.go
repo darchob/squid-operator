@@ -10,7 +10,7 @@ import (
 
 func Service(sr *squidv1.SquidInstance) *corev1.Service {
 	return &corev1.Service{
-		ObjectMeta: ObjectMeta(sr),
+		ObjectMeta: *ObjectMeta(sr),
 		Spec: corev1.ServiceSpec{
 			Ports: []corev1.ServicePort{
 				{
@@ -30,7 +30,7 @@ func Service(sr *squidv1.SquidInstance) *corev1.Service {
 
 func Ingress(sr *squidv1.SquidInstance) *networkingv1.Ingress {
 	return &networkingv1.Ingress{
-		ObjectMeta: ObjectMeta(sr),
+		ObjectMeta: *ObjectMeta(sr),
 		Spec:       sr.Spec.IngressSpec,
 	}
 }

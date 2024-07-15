@@ -18,13 +18,23 @@ const (
 // `
 )
 
-func Labels(sr *squidv1.SquidInstance) map[string]string {
-	return map[string]string{
-		"app.kubernetes.io/name":       sr.Name,
-		"app.kubernetes.io/version":    sr.Spec.Image.Tags,
-		"app.kubernetes.io/part-of":    fmt.Sprintf("squid-%s", sr.Name),
-		"app.kubernetes.io/managed-by": "squid-operator",
+func Labels(obj interface{}) map[string]string {
+	switch sr := obj.(type) {
+	case *squidv1.SquidInstance:
+		return map[string]string{
+			"app.kubernetes.io/name":       sr.Name,
+			"app.kubernetes.io/version":    sr.Spec.Image.Tags,
+			"app.kubernetes.io/part-of":    fmt.Sprintf("squid-%s", sr.Name),
+			"app.kubernetes.io/managed-by": "squid-operator",
+		}
+	case *squidv1.SquidConfigs:
+		return map[string]string{
+			"app.kubernetes.io/name":       sr.Name,
+			"app.kubernetes.io/part-of":    fmt.Sprintf("squid-%s", sr.Name),
+			"app.kubernetes.io/managed-by": "squid-operator",
+		}
 	}
+	return nil
 }
 
 func Annotations() map[string]string {
@@ -33,18 +43,37 @@ func Annotations() map[string]string {
 	}
 }
 
-func ObjectMeta(sr *squidv1.SquidInstance) metav1.ObjectMeta {
-	return metav1.ObjectMeta{
-		Name:        sr.Name,
-		Namespace:   sr.Namespace,
-		Labels:      Labels(sr),
-		Annotations: Annotations(),
-		OwnerReferences: []metav1.OwnerReference{
-			{
-				Name:       sr.Name,
-				Kind:       sr.Kind,
-				APIVersion: sr.APIVersion,
+func ObjectMeta(obj interface{}) *metav1.ObjectMeta {
+	switch sr := obj.(type) {
+	case *squidv1.SquidInstance:
+		return &metav1.ObjectMeta{
+			Name:        sr.Name,
+			Namespace:   sr.Namespace,
+			Labels:      Labels(sr),
+			Annotations: Annotations(),
+			OwnerReferences: []metav1.OwnerReference{
+				{
+					Name:       sr.Name,
+					Kind:       sr.Kind,
+					APIVersion: sr.APIVersion,
+				},
 			},
-		},
+		}
+	case *squidv1.SquidConfigs:
+		return &metav1.ObjectMeta{
+			Name:        sr.Name,
+			Namespace:   sr.Namespace,
+			Labels:      Labels(sr),
+			Annotations: Annotations(),
+			OwnerReferences: []metav1.OwnerReference{
+				{
+					Name:       sr.Name,
+					Kind:       sr.Kind,
+					APIVersion: sr.APIVersion,
+				},
+			},
+		}
 	}
+
+	return nil
 }
