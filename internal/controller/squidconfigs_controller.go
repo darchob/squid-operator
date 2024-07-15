@@ -26,7 +26,6 @@ import (
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/client-go/tools/record"
 	ctrl "sigs.k8s.io/controller-runtime"
@@ -175,14 +174,14 @@ func (r *SquidConfigsReconciler) configMapUpgrade(ctx context.Context, configs *
 			}
 
 			obj.Data[dataKey] = configs.Spec.Rules
-			configs.ObjectMeta.OwnerReferences = []metav1.OwnerReference{
-				{
-					Name:       obj.Name,
-					Kind:       obj.Kind,
-					APIVersion: obj.APIVersion,
-					UID:        obj.UID,
-				},
-			}
+			// configs.ObjectMeta.OwnerReferences = []metav1.OwnerReference{
+			// 	{
+			// 		Name:       obj.Name,
+			// 		Kind:       obj.Kind,
+			// 		APIVersion: obj.APIVersion,
+			// 		UID:        obj.UID,
+			// 	},
+			// }
 
 		case *appsv1.Deployment:
 			obj.Spec.Template.ObjectMeta.Annotations["squid-operator.kubernetes.io/restartedAt"] = time.Now().Format(time.RFC3339)
