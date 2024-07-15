@@ -229,7 +229,7 @@ func (r *SquidConfigsReconciler) deletion(ctx context.Context, configs *squidv1.
 			_, ok := obj.Data[dataKey]
 			if !ok {
 				err := fmt.Errorf(notFoundError)
-				log.Error(err, "deletion", configs.Name)
+				log.Error(err, "error on delete")
 				return err
 			}
 
