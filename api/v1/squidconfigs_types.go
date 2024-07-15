@@ -36,8 +36,7 @@ type SquidInstanceRef struct {
 
 // SquidConfigsStatus defines the observed state of SquidConfigs
 type SquidConfigsStatus struct {
-	Merged bool `json:"merged,omitempty"`
-	Apply  bool `json:"apply,omitempty"`
+	Apply bool `json:"apply,omitempty"`
 }
 
 //+kubebuilder:object:root=true

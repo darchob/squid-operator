@@ -56,8 +56,6 @@ spec:
             properties:
               apply:
                 type: boolean
-              merged:
-                type: boolean
             type: object
         type: object
     served: true
