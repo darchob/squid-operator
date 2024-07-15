@@ -105,6 +105,7 @@ func (r *SquidInstanceReconciler) SetupWithManager(mgr ctrl.Manager) error {
 		Owns(&corev1.ServiceAccount{}).
 		Owns(&corev1.ConfigMap{}).
 		Owns(&networkingv1.Ingress{}).
+		Owns(&corev1.PersistentVolumeClaim{}).
 		// WithEventFilter(predicate.GenerationChangedPredicate{}).
 		Complete(r)
 }
@@ -142,6 +143,7 @@ func (r *SquidInstanceReconciler) deletion(ctx context.Context, squidInstance *s
 		&corev1.ServiceAccount{},
 		&corev1.Service{},
 		&networkingv1.Ingress{},
+		&corev1.PersistentVolumeClaim{},
 	}
 
 	for _, object := range objectsList {
@@ -174,6 +176,7 @@ func (r *SquidInstanceReconciler) create(ctx context.Context, squidInstance *squ
 		&corev1.ServiceAccount{},
 		&corev1.Service{},
 		&networkingv1.Ingress{},
+		&corev1.PersistentVolumeClaim{},
 	}
 
 	for _, object := range objectsList {
@@ -193,6 +196,8 @@ func (r *SquidInstanceReconciler) create(ctx context.Context, squidInstance *squ
 				object = squid.Service(squidInstance)
 			case *networkingv1.Ingress:
 				object = squid.Ingress(squidInstance)
+			case *corev1.PersistentVolumeClaim:
+				object = squid.PersistentVolumeClaim(squidInstance)
 			}
 
 			log.Info("Reconcile", "create", object.GetName())

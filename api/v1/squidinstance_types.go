@@ -42,6 +42,8 @@ type SquidInstanceSpec struct {
 	// Specify the Squid ingress
 	IngressSpec networkingv1.IngressSpec `json:"ingressSpec"`
 
+	StorageClassName string `json:"storageClassName"`
+
 	// Specify the Squid container image to use
 	Image Image `json:"image"`
 }
