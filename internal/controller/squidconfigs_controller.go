@@ -26,6 +26,7 @@ import (
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/client-go/tools/record"
 	ctrl "sigs.k8s.io/controller-runtime"
@@ -171,6 +172,16 @@ func (r *SquidConfigsReconciler) configMapUpgrade(ctx context.Context, configs *
 			_, ok := obj.Data[dataKey]
 			if ok {
 				return fmt.Errorf(duplicateError)
+			}
+
+			obj.Data[dataKey] = configs.Spec.Rules
+			configs.ObjectMeta.OwnerReferences = []metav1.OwnerReference{
+				{
+					Name:       obj.Name,
+					Kind:       obj.Kind,
+					APIVersion: obj.APIVersion,
+					UID:        obj.UID,
+				},
 			}
 
 		case *appsv1.Deployment:
