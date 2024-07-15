@@ -174,14 +174,6 @@ func (r *SquidConfigsReconciler) configMapUpgrade(ctx context.Context, configs *
 			}
 
 			obj.Data[dataKey] = configs.Spec.Rules
-			// configs.ObjectMeta.OwnerReferences = []metav1.OwnerReference{
-			// 	{
-			// 		Name:       obj.Name,
-			// 		Kind:       obj.Kind,
-			// 		APIVersion: obj.APIVersion,
-			// 		UID:        obj.UID,
-			// 	},
-			// }
 
 		case *appsv1.Deployment:
 			obj.Spec.Template.ObjectMeta.Annotations["squid-operator.kubernetes.io/restartedAt"] = time.Now().Format(time.RFC3339)
