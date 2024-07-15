@@ -32,7 +32,7 @@ rules:
 - apiGroups:
   - ""
   resources:
-  - persistentVolumeClaims
+  - persistentvolumeclaims
   verbs:
   - create
   - delete
