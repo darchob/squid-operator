@@ -48,6 +48,14 @@ func NewDeployment(sr *squidv1.SquidInstance) *appsv1.Deployment {
 								},
 							},
 						},
+						{
+							Name: "logs",
+							VolumeSource: corev1.VolumeSource{
+								PersistentVolumeClaim: &corev1.PersistentVolumeClaimVolumeSource{
+									ClaimName: sr.Name,
+								},
+							},
+						},
 					},
 					Containers: []corev1.Container{
 						{
@@ -58,6 +66,10 @@ func NewDeployment(sr *squidv1.SquidInstance) *appsv1.Deployment {
 								{
 									Name:      "configs",
 									MountPath: "/etc/squid/conf.d/",
+								},
+								{
+									Name:      "logs",
+									MountPath: "/var/log/squid",
 								},
 							},
 							Ports: []corev1.ContainerPort{
