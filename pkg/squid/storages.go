@@ -23,7 +23,7 @@ func PersistentVolumeClaim(sr *squidv1.SquidInstance) *corev1.PersistentVolumeCl
 		ObjectMeta: *ObjectMeta(sr),
 		Spec: corev1.PersistentVolumeClaimSpec{
 			AccessModes: []corev1.PersistentVolumeAccessMode{
-				corev1.ReadWriteOnce,
+				corev1.ReadWriteMany,
 			},
 			StorageClassName: &sr.Spec.StorageClassName,
 			Resources: corev1.VolumeResourceRequirements{
