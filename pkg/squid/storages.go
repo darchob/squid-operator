@@ -22,7 +22,6 @@ func PersistentVolumeClaim(sr *squidv1.SquidInstance) *corev1.PersistentVolumeCl
 	return &corev1.PersistentVolumeClaim{
 		ObjectMeta: *ObjectMeta(sr),
 		Spec: corev1.PersistentVolumeClaimSpec{
-			VolumeName: fmt.Sprintf("%s-volume", sr.Name),
 			AccessModes: []corev1.PersistentVolumeAccessMode{
 				corev1.ReadWriteOnce,
 			},
