@@ -24,7 +24,6 @@ import (
 	squid "git.fr.clara.net/claranet/healthcare/buildops/projects/kubernetes/operators/squid-operator/pkg/squid"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
-	networkingv1 "k8s.io/api/networking/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/client-go/tools/record"
@@ -77,12 +76,6 @@ var managedResources = []ManagedResource{
 		},
 	},
 	{
-		Type: &networkingv1.Ingress{},
-		Generate: func(si *squidv1.SquidInstance) client.Object {
-			return squid.Ingress(si)
-		},
-	},
-	{
 		Type: &corev1.PersistentVolumeClaim{},
 		Generate: func(si *squidv1.SquidInstance) client.Object {
 			return squid.PersistentVolumeClaim(si)
@@ -98,7 +91,6 @@ var managedResources = []ManagedResource{
 // +kubebuilder:rbac:groups="",resources=serviceaccounts,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups="",resources=events,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups="",resources=services,verbs=get;list;watch;create;update;patch;delete
-// +kubebuilder:rbac:groups=networking.k8s.io,resources=ingresses,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups="",resources=events,verbs=get;list;watch;create;update;patch;delete
 func (r *SquidInstanceReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
 	log := log.Log.WithName("squidInstances")
@@ -127,9 +119,7 @@ func (r *SquidInstanceReconciler) SetupWithManager(mgr ctrl.Manager) error {
 		Owns(&appsv1.Deployment{}).
 		Owns(&corev1.ServiceAccount{}).
 		Owns(&corev1.ConfigMap{}).
-		Owns(&networkingv1.Ingress{}).
 		Owns(&corev1.PersistentVolumeClaim{}).
-		// WithEventFilter(predicate.GenerationChangedPredicate{}).
 		Complete(r)
 }
 
@@ -216,13 +206,18 @@ func (r *SquidInstanceReconciler) createResource(ctx context.Context, instance *
 func (r *SquidInstanceReconciler) updateResource(ctx context.Context, instance *squidv1.SquidInstance, resource ManagedResource) error {
 	newResource := resource.Generate(instance)
 
-	switch newResource.(type) {
+	switch obj := newResource.(type) {
 	case *corev1.PersistentVolumeClaim:
 		return nil
+	case *corev1.Service:
+		if len(obj.Status.LoadBalancer.Ingress) == 0 {
+			return nil
+		}
+		instance.Status.LoadBalancer.Ingress = obj.Status.LoadBalancer.Ingress
 	}
 
 	if err := r.Update(ctx, newResource); err != nil {
-		return fmt.Errorf("failed to create resource: %w", err)
+		return fmt.Errorf("failed to update resource: %w", err)
 	}
 
 	r.Recorder.Event(instance, "Normal", "Updated",

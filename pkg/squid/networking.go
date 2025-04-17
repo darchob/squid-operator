@@ -4,7 +4,6 @@ import (
 	squidv1 "git.fr.clara.net/claranet/healthcare/buildops/projects/kubernetes/operators/squid-operator/api/v1"
 	corev1 "k8s.io/api/core/v1"
 
-	networkingv1 "k8s.io/api/networking/v1"
 	"k8s.io/apimachinery/pkg/util/intstr"
 )
 
@@ -23,14 +22,7 @@ func Service(sr *squidv1.SquidInstance) *corev1.Service {
 			Selector: map[string]string{
 				"app.kubernetes.io/name": sr.Name,
 			},
-			Type: corev1.ServiceTypeClusterIP,
+			Type: corev1.ServiceTypeLoadBalancer,
 		},
-	}
-}
-
-func Ingress(sr *squidv1.SquidInstance) *networkingv1.Ingress {
-	return &networkingv1.Ingress{
-		ObjectMeta: *ObjectMeta(sr),
-		Spec:       sr.Spec.IngressSpec,
 	}
 }
