@@ -2,6 +2,7 @@ package controller
 
 import (
 	"fmt"
+	"reflect"
 
 	squidv1 "git.fr.clara.net/claranet/healthcare/buildops/projects/kubernetes/operators/squid-operator/api/v1"
 	corev1 "k8s.io/api/core/v1"
@@ -41,9 +42,11 @@ func handleConfigMap(obj client.Object, configs *squidv1.SquidConfigs, truncate 
 		return configmap, nil
 	}
 
-	_, ok = configmap.Data[dataKey]
+	content, ok := configmap.Data[dataKey]
 	if ok {
-		return nil, fmt.Errorf(duplicateError, dataKey)
+		if reflect.DeepEqual(content, configs.Spec.Rules) {
+			return nil, fmt.Errorf(duplicateError, dataKey)
+		}
 	}
 
 	configmap.Data[dataKey] = configs.Spec.Rules
