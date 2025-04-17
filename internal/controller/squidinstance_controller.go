@@ -216,6 +216,11 @@ func (r *SquidInstanceReconciler) createResource(ctx context.Context, instance *
 func (r *SquidInstanceReconciler) updateResource(ctx context.Context, instance *squidv1.SquidInstance, resource ManagedResource) error {
 	newResource := resource.Generate(instance)
 
+	switch newResource.(type) {
+	case *corev1.PersistentVolumeClaim:
+		return nil
+	}
+
 	if err := r.Update(ctx, newResource); err != nil {
 		return fmt.Errorf("failed to create resource: %w", err)
 	}
