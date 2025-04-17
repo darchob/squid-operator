@@ -18,6 +18,10 @@ const (
 )
 
 func isDuplicateErr(err error) bool {
+	if err == nil {
+		return false
+	}
+
 	return err.Error() == duplicateError
 }
 
