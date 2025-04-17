@@ -54,8 +54,8 @@ spec:
           status:
             description: SquidConfigsStatus defines the observed state of SquidConfigs
             properties:
-              apply:
-                type: boolean
+              state:
+                type: string
             type: object
         type: object
     served: true

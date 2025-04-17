@@ -19,7 +19,6 @@ package controller
 import (
 	"context"
 	"fmt"
-	"reflect"
 
 	squidv1 "git.fr.clara.net/claranet/healthcare/buildops/projects/kubernetes/operators/squid-operator/api/v1"
 	squid "git.fr.clara.net/claranet/healthcare/buildops/projects/kubernetes/operators/squid-operator/pkg/squid"
@@ -42,26 +41,67 @@ type SquidInstanceReconciler struct {
 	Recorder record.EventRecorder
 }
 
-//+kubebuilder:rbac:groups=squid.cdk.clara.net,resources=squidinstances,verbs=get;list;watch;create;update;patch;delete
-//+kubebuilder:rbac:groups=squid.cdk.clara.net,resources=squidinstances/status,verbs=get;update;patch
-//+kubebuilder:rbac:groups=squid.cdk.clara.net,resources=squidinstances/finalizers,verbs=update
+// ResourceGenerator définit une fonction qui crée une ressource Kubernetes
+type ResourceGenerator func(*squidv1.SquidInstance) client.Object
 
-//+kubebuilder:rbac:groups="",resources=configmaps,verbs=get;list;watch;create;update;patch;delete
-//+kubebuilder:rbac:groups=apps,resources=deployments,verbs=get;list;watch;create;update;patch;delete
-//+kubebuilder:rbac:groups="",resources=serviceaccounts,verbs=get;list;watch;create;update;patch;delete
-//+kubebuilder:rbac:groups="",resources=events,verbs=get;list;watch;create;update;patch;delete
-//+kubebuilder:rbac:groups="",resources=services,verbs=get;list;watch;create;update;patch;delete
-//+kubebuilder:rbac:groups=networking.k8s.io,resources=ingresses,verbs=get;list;watch;create;update;patch;delete
+// ManagedResource définit une ressource à gérer
+type ManagedResource struct {
+	Type     client.Object
+	Generate ResourceGenerator
+}
 
-//+kubebuilder:rbac:groups="",resources=events,verbs=get;list;watch;create;update;patch;delete
+// Définition des ressources gérées
+var managedResources = []ManagedResource{
+	{
+		Type: &appsv1.Deployment{},
+		Generate: func(si *squidv1.SquidInstance) client.Object {
+			return squid.NewDeployment(si)
+		},
+	},
+	{
+		Type: &corev1.ConfigMap{},
+		Generate: func(si *squidv1.SquidInstance) client.Object {
+			return squid.ConfigMap(si)
+		},
+	},
+	{
+		Type: &corev1.ServiceAccount{},
+		Generate: func(si *squidv1.SquidInstance) client.Object {
+			return squid.NewServiceAccount(si)
+		},
+	},
+	{
+		Type: &corev1.Service{},
+		Generate: func(si *squidv1.SquidInstance) client.Object {
+			return squid.Service(si)
+		},
+	},
+	{
+		Type: &networkingv1.Ingress{},
+		Generate: func(si *squidv1.SquidInstance) client.Object {
+			return squid.Ingress(si)
+		},
+	},
+	{
+		Type: &corev1.PersistentVolumeClaim{},
+		Generate: func(si *squidv1.SquidInstance) client.Object {
+			return squid.PersistentVolumeClaim(si)
+		},
+	},
+}
 
-// Reconcile is part of the main kubernetes reconciliation loop which aims to
-// move the current state of the cluster closer to the desired state.
-
-// For more details, check Reconcile and its Result here:
-// - https://pkg.go.dev/sigs.k8s.io/controller-runtime@v0.17.3/pkg/reconcile
+// +kubebuilder:rbac:groups=squid.cdk.clara.net,resources=squidinstances,verbs=get;list;watch;create;update;patch;delete
+// +kubebuilder:rbac:groups=squid.cdk.clara.net,resources=squidinstances/status,verbs=get;update;patch
+// +kubebuilder:rbac:groups=squid.cdk.clara.net,resources=squidinstances/finalizers,verbs=update
+// +kubebuilder:rbac:groups="",resources=configmaps,verbs=get;list;watch;create;update;patch;delete
+// +kubebuilder:rbac:groups=apps,resources=deployments,verbs=get;list;watch;create;update;patch;delete
+// +kubebuilder:rbac:groups="",resources=serviceaccounts,verbs=get;list;watch;create;update;patch;delete
+// +kubebuilder:rbac:groups="",resources=events,verbs=get;list;watch;create;update;patch;delete
+// +kubebuilder:rbac:groups="",resources=services,verbs=get;list;watch;create;update;patch;delete
+// +kubebuilder:rbac:groups=networking.k8s.io,resources=ingresses,verbs=get;list;watch;create;update;patch;delete
+// +kubebuilder:rbac:groups="",resources=events,verbs=get;list;watch;create;update;patch;delete
 func (r *SquidInstanceReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
-	log := log.Log.WithName("squidInstance")
+	log := log.Log.WithName("squidInstances")
 
 	log.Info("Reconcile", "request", req.NamespacedName)
 
@@ -70,31 +110,14 @@ func (r *SquidInstanceReconciler) Reconcile(ctx context.Context, req ctrl.Reques
 		return ctrl.Result{}, client.IgnoreNotFound(err)
 	}
 
-	if !controllerutil.ContainsFinalizer(&squidInstance, finalizerName) {
-		if err := r.init(ctx, &squidInstance); err != nil {
-			return ctrl.Result{}, err
-		}
-
-		return ctrl.Result{Requeue: true}, nil
+	switch {
+	case !controllerutil.ContainsFinalizer(&squidInstance, finalizerName):
+		return r.handlingInit(ctx, &squidInstance)
+	case squidInstance.DeletionTimestamp != nil:
+		return r.handlingDeletion(ctx, &squidInstance)
+	default:
+		return r.handlingReconciliation(ctx, &squidInstance)
 	}
-
-	if !squidInstance.ObjectMeta.DeletionTimestamp.IsZero() {
-		log.Info("resource deleting", "resource", req.NamespacedName)
-		if err := r.deletion(ctx, &squidInstance); err != nil {
-			return ctrl.Result{}, err
-		}
-
-		return ctrl.Result{}, nil
-	}
-
-	if err := r.create(ctx, &squidInstance); err != nil {
-		log.Error(err, "resource creating failed")
-		squidInstance.Status.Health = squidv1.PhaseError
-		return r.handlingUpdate(ctx, &squidInstance)
-	}
-
-	squidInstance.Status.Health = squidv1.PhaseDone
-	return r.handlingUpdate(ctx, &squidInstance)
 }
 
 // SetupWithManager sets up the controller with the Manager.
@@ -110,109 +133,113 @@ func (r *SquidInstanceReconciler) SetupWithManager(mgr ctrl.Manager) error {
 		Complete(r)
 }
 
-func (r *SquidInstanceReconciler) handlingUpdate(ctx context.Context, squidInstance *squidv1.SquidInstance) (ctrl.Result, error) {
-	if err := r.Status().Update(ctx, squidInstance); err != nil {
+func (r *SquidInstanceReconciler) handlingInit(ctx context.Context, squidInstance *squidv1.SquidInstance) (ctrl.Result, error) {
+	log := log.FromContext(ctx).WithName(squidInstance.Name)
+
+	log.Info("initialize", "squidInstance", squidInstance.Name)
+
+	squidInstance.ObjectMeta.Finalizers = append(squidInstance.ObjectMeta.Finalizers, finalizerName)
+	if err := r.Update(ctx, squidInstance); err != nil {
 		return ctrl.Result{}, err
+	}
+
+	return ctrl.Result{Requeue: true}, nil
+}
+
+func (r *SquidInstanceReconciler) handlingUpdate(ctx context.Context, squidInstance *squidv1.SquidInstance) (ctrl.Result, error) {
+	log := log.FromContext(ctx).WithName(squidInstance.Name)
+
+	if err := r.Status().Update(ctx, squidInstance); err != nil {
+		if errors.IsConflict(err) {
+			// Conflit de mise à jour, on requeue
+			log.Info("Update conflict detected, requeing", "name", squidInstance.Name)
+			return ctrl.Result{Requeue: true}, nil
+		}
+		log.Error(err, "Failed to update status", "name", squidInstance.Name)
+		return ctrl.Result{}, fmt.Errorf("failed to update status: %w", err)
 	}
 
 	return ctrl.Result{Requeue: false}, nil
 }
 
-func (r *SquidInstanceReconciler) init(ctx context.Context, squidInstance *squidv1.SquidInstance) error {
-	log := log.Log.WithName("squidInstance")
+func (r *SquidInstanceReconciler) handlingReconciliation(ctx context.Context, instance *squidv1.SquidInstance) (ctrl.Result, error) {
+	log := log.FromContext(ctx).WithName(instance.Name)
+	log.Info("reconcile", "squidInstance", instance.Name)
 
-	log.Info("Reconcile", "init", squidInstance.Name)
-
-	squidInstance.ObjectMeta.Finalizers = append(squidInstance.ObjectMeta.Finalizers, finalizerName)
-	if err := r.Update(ctx, squidInstance); err != nil {
-		log.Error(err, "init", "finalizer", squidInstance.Name)
-		return err
+	for _, resource := range managedResources {
+		if err := r.reconcileSingleResource(ctx, instance, resource); err != nil {
+			log.Error(err, "Failed to reconcile resource")
+			instance.Status.Health = squidv1.PhaseError
+			return r.handlingUpdate(ctx, instance)
+		}
 	}
 
-	return nil
+	instance.Status.Health = squidv1.PhaseDone
+	return r.handlingUpdate(ctx, instance)
 }
 
-func (r *SquidInstanceReconciler) deletion(ctx context.Context, squidInstance *squidv1.SquidInstance) error {
-	log := log.Log.WithName("squidInstance")
+func (r *SquidInstanceReconciler) reconcileSingleResource(ctx context.Context, instance *squidv1.SquidInstance, resource ManagedResource) error {
+	existing := resource.Type.DeepCopyObject().(client.Object)
 
-	log.Info("Reconcile", "deletion", squidInstance.Name)
+	err := r.Get(ctx, client.ObjectKey{
+		Namespace: instance.Namespace,
+		Name:      instance.Name,
+	}, existing)
 
-	objectsList := []client.Object{
-		&appsv1.Deployment{},
-		&corev1.ConfigMap{},
-		&corev1.ServiceAccount{},
-		&corev1.Service{},
-		&networkingv1.Ingress{},
-		&corev1.PersistentVolumeClaim{},
-	}
-
-	for _, object := range objectsList {
-		if err := r.Get(ctx, client.ObjectKey{Namespace: squidInstance.Namespace, Name: squidInstance.Name}, object); err != nil {
-			return client.IgnoreNotFound(err)
-		}
-
-		log.Info("Reconcile", "deletion", object.GetName())
-		if err := r.Delete(ctx, object); err != nil {
+	if err != nil {
+		if !errors.IsNotFound(err) {
 			return err
 		}
-	}
-
-	squidInstance.ObjectMeta.Finalizers = []string{}
-	if err := r.Update(ctx, squidInstance); err != nil {
-		log.Error(err, "init", "finalizer", squidInstance.Name)
-		return err
+		return r.createResource(ctx, instance, resource)
 	}
 
 	return nil
 }
 
-func (r *SquidInstanceReconciler) create(ctx context.Context, squidInstance *squidv1.SquidInstance) error {
-	log := log.Log.WithName("squidInstance")
-	log.Info("Reconcile", "creatOrUpdate", squidInstance.Name)
+func (r *SquidInstanceReconciler) createResource(ctx context.Context, instance *squidv1.SquidInstance, resource ManagedResource) error {
+	newResource := resource.Generate(instance)
 
-	objectsList := []client.Object{
-		&appsv1.Deployment{},
-		&corev1.ConfigMap{},
-		&corev1.ServiceAccount{},
-		&corev1.Service{},
-		&networkingv1.Ingress{},
-		&corev1.PersistentVolumeClaim{},
+	if err := controllerutil.SetControllerReference(instance, newResource, r.Scheme); err != nil {
+		return fmt.Errorf("failed to set controller reference: %w", err)
 	}
 
-	for _, object := range objectsList {
-		if err := r.Get(ctx, client.ObjectKey{Namespace: squidInstance.Namespace, Name: squidInstance.Name}, object); err != nil {
+	if err := r.Create(ctx, newResource); err != nil {
+		return fmt.Errorf("failed to create resource: %w", err)
+	}
+
+	r.Recorder.Event(instance, "Normal", "Created",
+		fmt.Sprintf("Created %T %s", newResource, newResource.GetName()))
+
+	return nil
+}
+
+func (r *SquidInstanceReconciler) handlingDeletion(ctx context.Context, instance *squidv1.SquidInstance) (ctrl.Result, error) {
+	log := log.FromContext(ctx).WithName(instance.Name)
+	log.Info("deletion", "squidInstance", instance.Name)
+
+	for _, resource := range managedResources {
+		existing := resource.Type.DeepCopyObject().(client.Object)
+		err := r.Get(ctx, client.ObjectKey{
+			Namespace: instance.Namespace,
+			Name:      instance.Name,
+		}, existing)
+
+		if err != nil {
 			if !errors.IsNotFound(err) {
-				return err
+				return ctrl.Result{}, err
 			}
+			continue
+		}
 
-			switch object.(type) {
-			case *appsv1.Deployment:
-				object = squid.NewDeployment(squidInstance)
-			case *corev1.ConfigMap:
-				object = squid.ConfigMap(squidInstance)
-			case *corev1.ServiceAccount:
-				object = squid.NewServiceAccount(squidInstance)
-			case *corev1.Service:
-				object = squid.Service(squidInstance)
-			case *networkingv1.Ingress:
-				object = squid.Ingress(squidInstance)
-			case *corev1.PersistentVolumeClaim:
-				object = squid.PersistentVolumeClaim(squidInstance)
-			}
-
-			log.Info("Reconcile", "create", object.GetName())
-			if err := r.Create(ctx, object); err != nil {
-				log.Error(err, "createOrUpdate", reflect.TypeOf(object).String(), squidInstance.Name)
-				return err
-			}
-
-			if err := controllerutil.SetControllerReference(squidInstance, object, r.Scheme); err != nil {
-				return err
-			}
-
-			r.Recorder.Event(squidInstance, "Normal", "Deployed", fmt.Sprintf("%s %s has been deployed", reflect.TypeOf(object).String(), object.GetName()))
+		if err := r.Delete(ctx, existing); err != nil {
+			return ctrl.Result{}, err
 		}
 	}
 
-	return nil
+	controllerutil.RemoveFinalizer(instance, finalizerName)
+	if err := r.Update(ctx, instance); err != nil {
+		return ctrl.Result{}, err
+	}
+
+	return ctrl.Result{}, nil
 }

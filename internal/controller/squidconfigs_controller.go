@@ -35,23 +35,28 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/predicate"
 )
 
+type state int
+
+const (
+	merged state = iota
+	deletion
+	applying
+	failed
+)
+
+var states = map[state]string{
+	merged:   "Merged",
+	deletion: "Deletion",
+	applying: "Applying",
+	failed:   "Failed",
+}
+
 // SquidConfigsReconciler reconciles a SquidConfigs object
 type SquidConfigsReconciler struct {
 	client.Client
 	Scheme   *runtime.Scheme
 	Recorder record.EventRecorder
 }
-
-var (
-	duplicateError = "dupplicate key found"
-	notFoundError  = "key not found"
-	emptyError     = "configmap is empty"
-)
-
-const (
-	finalizerName = "squid.ckd.clara.net/finalizer"
-	configField   = "metadata.annotations[\"squid.ckd.clara.net/instance\"]"
-)
 
 //+kubebuilder:rbac:groups=squid.cdk.clara.net,resources=squidconfigs,verbs=get;list;watch;create;update;patch;delete
 //+kubebuilder:rbac:groups=squid.cdk.clara.net,resources=squidconfigs/status,verbs=get;update;patch
@@ -80,52 +85,12 @@ func (r *SquidConfigsReconciler) Reconcile(ctx context.Context, req ctrl.Request
 		return ctrl.Result{}, client.IgnoreNotFound(err)
 	}
 
-	if !controllerutil.ContainsFinalizer(&squidConfig, finalizerName) {
-		if err := r.init(ctx, &squidConfig); err != nil {
-			return ctrl.Result{}, err
-		}
-
-		return ctrl.Result{Requeue: true}, nil
+	switch {
+	case !controllerutil.ContainsFinalizer(&squidConfig, finalizerName):
+		return r.appendFinalizer(ctx, &squidConfig)
+	default:
+		return r.handlingReconciliation(ctx, &squidConfig)
 	}
-
-	if !squidConfig.ObjectMeta.DeletionTimestamp.IsZero() {
-		log.Info("resource deleting", "resource", req.NamespacedName)
-		if err := r.deletion(ctx, &squidConfig); err != nil {
-			if errors.IsConflict(err) {
-				log.Error(err, "couldn't delete", "configs", squidConfig.Name)
-				return r.handlingRequeuUpdate(ctx, &squidConfig)
-			}
-
-			if isEmptyErr(err) {
-				log.Error(err, "empty", "configs", squidConfig.Name)
-				return ctrl.Result{}, nil
-			}
-
-			if isNotFoundErr(err) {
-				log.Error(err, "not found", "configs", squidConfig.Name)
-				return ctrl.Result{}, nil
-			}
-
-			log.Error(err, "unknow", "configs", squidConfig.Name)
-			return ctrl.Result{}, err
-		}
-
-		return ctrl.Result{}, nil
-	}
-
-	if err := r.configMapUpgrade(ctx, &squidConfig); err != nil {
-		squidConfig.Status.Apply = false
-		if errors.IsConflict(err) {
-			return r.handlingRequeuUpdate(ctx, &squidConfig)
-		}
-
-		if !isDuplicateErr(err) {
-			return r.handlingUpdate(ctx, &squidConfig)
-		}
-	}
-
-	squidConfig.Status.Apply = true
-	return r.handlingUpdate(ctx, &squidConfig)
 }
 
 // SetupWithManager sets up the controller with the Manager.
@@ -137,24 +102,19 @@ func (r *SquidConfigsReconciler) SetupWithManager(mgr ctrl.Manager) error {
 		Complete(r)
 }
 
-func (r *SquidConfigsReconciler) handlingRequeuUpdate(ctx context.Context, configs *squidv1.SquidConfigs) (ctrl.Result, error) {
-	if err := r.Status().Update(ctx, configs); err != nil {
-		return ctrl.Result{}, err
+func (r *SquidConfigsReconciler) appendFinalizer(ctx context.Context, configs *squidv1.SquidConfigs) (ctrl.Result, error) {
+	log := log.FromContext(ctx).WithName(configs.Name)
+	log.Info("initialize", "squidConfig", configs.Name)
+
+	if reflect.DeepEqual(configs.ObjectMeta.Finalizers, []string{}) {
+		configs.ObjectMeta.Finalizers = append(configs.ObjectMeta.Finalizers, finalizerName)
 	}
 
-	return ctrl.Result{Requeue: true}, nil
+	return r.handlingUpdate(ctx, configs, nil, applying)
 }
 
-func (r *SquidConfigsReconciler) handlingUpdate(ctx context.Context, configs *squidv1.SquidConfigs) (ctrl.Result, error) {
-	if err := r.Status().Update(ctx, configs); err != nil {
-		return ctrl.Result{}, err
-	}
-
-	return ctrl.Result{Requeue: false}, nil
-}
-
-func (r *SquidConfigsReconciler) configMapUpgrade(ctx context.Context, configs *squidv1.SquidConfigs) error {
-	_ = log.Log.WithName("squidConfigs")
+func (r *SquidConfigsReconciler) handlingReconciliation(ctx context.Context, configs *squidv1.SquidConfigs) (ctrl.Result, error) {
+	_ = log.FromContext(ctx).WithName(configs.Name)
 
 	objectsList := []client.Object{
 		&appsv1.Deployment{},
@@ -164,108 +124,60 @@ func (r *SquidConfigsReconciler) configMapUpgrade(ctx context.Context, configs *
 	configMapName := configs.GetAnnotations()["squid.ckd.clara.net/instance"]
 	for _, object := range objectsList {
 		if err := r.Get(ctx, client.ObjectKey{Namespace: configs.Namespace, Name: configMapName}, object); err != nil {
-			return err
+			return ctrl.Result{}, err
 		}
 
+		truncate := false
 		switch obj := object.(type) {
 		case *corev1.ConfigMap:
-			if obj.Data == nil {
-				obj.Data = make(map[string]string)
+			if !configs.ObjectMeta.DeletionTimestamp.IsZero() {
+				truncate = true
 			}
 
-			dataKey := fmt.Sprintf("%s.conf", configs.Name)
-			_, ok := obj.Data[dataKey]
-			if ok {
-				return fmt.Errorf(duplicateError)
+			configmap, err := handleConfigMap(obj, configs, truncate)
+			if err != nil {
+				return r.handlingUpdate(ctx, configs, err, failed)
 			}
 
-			obj.Data[dataKey] = configs.Spec.Rules
-
+			if err := r.Update(ctx, configmap); err != nil {
+				return r.handlingUpdate(ctx, configs, err, failed)
+			}
 		case *appsv1.Deployment:
-			obj.Spec.Template.ObjectMeta.Annotations["squid-operator.kubernetes.io/restartedAt"] = time.Now().Format(time.RFC3339)
-		}
-
-		if err := r.Update(ctx, object); err != nil {
-			return err
+			deployment := obj.DeepCopy()
+			deployment.Spec.Template.ObjectMeta.Annotations["squid-operator.kubernetes.io/restartedAt"] = time.Now().Format(time.RFC3339)
+			if err := r.Update(ctx, deployment); err != nil {
+				return r.handlingUpdate(ctx, configs, err, failed)
+			}
 		}
 
 		r.Recorder.Event(configs, "Normal", "Updated", fmt.Sprintf("%s %s has been updated", reflect.TypeOf(object).String(), object.GetName()))
 	}
 
-	return nil
+	return r.handlingUpdate(ctx, configs, nil, merged)
 }
 
-func (r *SquidConfigsReconciler) init(ctx context.Context, squidConfigs *squidv1.SquidConfigs) error {
-	log := log.Log.WithName("squidConfigs")
+func (r *SquidConfigsReconciler) handlingUpdate(ctx context.Context, configs *squidv1.SquidConfigs, err error, state state) (ctrl.Result, error) {
+	configs.Status.State = states[state]
 
-	log.Info("Reconcile", "init", squidConfigs.Name)
-
-	squidConfigs.ObjectMeta.Finalizers = append(squidConfigs.ObjectMeta.Finalizers, finalizerName)
-	if err := r.Update(ctx, squidConfigs); err != nil {
-		log.Error(err, "init", "finalizer", squidConfigs.Name)
-		return err
-	}
-
-	return nil
-}
-
-func (r *SquidConfigsReconciler) deletion(ctx context.Context, configs *squidv1.SquidConfigs) error {
-	log := log.Log.WithName("squidConfigs")
-
-	objectsList := []client.Object{
-		&appsv1.Deployment{},
-		&corev1.ConfigMap{},
-	}
-
-	configMapName := configs.GetAnnotations()["squid.ckd.clara.net/instance"]
-	for _, object := range objectsList {
-		if err := r.Get(ctx, client.ObjectKey{Namespace: configs.Namespace, Name: configMapName}, object); err != nil {
-			return err
+	if !configs.ObjectMeta.DeletionTimestamp.IsZero() {
+		configs.Status.State = states[deletion]
+		if !errors.IsConflict(err) {
+			return ctrl.Result{}, err
 		}
 
-		switch obj := object.(type) {
-		case *corev1.ConfigMap:
-			if obj.Data == nil {
-				err := fmt.Errorf(emptyError)
-				log.Error(err, "deletion", configs.Name)
-				return err
-			}
-
-			dataKey := fmt.Sprintf("%s.conf", configs.Name)
-			_, ok := obj.Data[dataKey]
-			if !ok {
-				err := fmt.Errorf(notFoundError)
-				log.Error(err, "error on delete")
-				return err
-			}
-
-			delete(obj.Data, dataKey)
-		case *appsv1.Deployment:
-			obj.Spec.Template.ObjectMeta.Annotations["squid-operator.kubernetes.io/restartedAt"] = time.Now().Format(time.RFC3339)
+		if !reflect.DeepEqual(configs.ObjectMeta.Finalizers, []string{}) {
+			configs.ObjectMeta.Finalizers = []string{}
 		}
 
-		if err := r.Update(ctx, object); err != nil {
-			return err
-		}
 	}
 
-	configs.ObjectMeta.Finalizers = []string{}
+	if !isDuplicateErr(err) {
+		configs.Status.State = states[failed]
+	}
+
 	if err := r.Update(ctx, configs); err != nil {
-		log.Error(err, "init", "finalizer", configs.Name)
-		return err
+		return ctrl.Result{}, err
 	}
 
-	return nil
-}
-
-func isDuplicateErr(err error) bool {
-	return err.Error() == duplicateError
-}
-
-func isNotFoundErr(err error) bool {
-	return err.Error() == notFoundError
-}
-
-func isEmptyErr(err error) bool {
-	return err.Error() == emptyError
+	return ctrl.Result{Requeue: true}, nil
 }

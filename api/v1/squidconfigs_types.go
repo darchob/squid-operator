@@ -36,7 +36,7 @@ type SquidInstanceRef struct {
 
 // SquidConfigsStatus defines the observed state of SquidConfigs
 type SquidConfigsStatus struct {
-	Apply bool `json:"apply,omitempty"`
+	State string `json:"state,omitempty"`
 }
 
 //+kubebuilder:object:root=true

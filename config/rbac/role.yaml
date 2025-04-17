@@ -7,7 +7,7 @@ rules:
 - apiGroups:
   - ""
   resources:
-  - persistentvolumeclaims
+  - ""
   verbs:
   - create
   - delete
@@ -43,18 +43,6 @@ rules:
 - apiGroups:
   - ""
   resources:
-  - serviceaccounts
-  verbs:
-  - create
-  - delete
-  - get
-  - list
-  - patch
-  - update
-  - watch
-- apiGroups:
-  - ""
-  resources:
   - services
   verbs:
   - create
@@ -68,18 +56,6 @@ rules:
   - apps
   resources:
   - deployment
-  verbs:
-  - create
-  - delete
-  - get
-  - list
-  - patch
-  - update
-  - watch
-- apiGroups:
-  - apps
-  resources:
-  - deployments
   verbs:
   - create
   - delete
@@ -122,32 +98,6 @@ rules:
   - squid.cdk.clara.net
   resources:
   - squidconfigs/status
-  verbs:
-  - get
-  - patch
-  - update
-- apiGroups:
-  - squid.cdk.clara.net
-  resources:
-  - squidinstances
-  verbs:
-  - create
-  - delete
-  - get
-  - list
-  - patch
-  - update
-  - watch
-- apiGroups:
-  - squid.cdk.clara.net
-  resources:
-  - squidinstances/finalizers
-  verbs:
-  - update
-- apiGroups:
-  - squid.cdk.clara.net
-  resources:
-  - squidinstances/status
   verbs:
   - get
   - patch
