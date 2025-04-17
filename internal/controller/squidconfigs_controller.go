@@ -172,5 +172,5 @@ func (r *SquidConfigsReconciler) handlingUpdate(ctx context.Context, configs *sq
 		return ctrl.Result{}, err
 	}
 
-	return ctrl.Result{}, nil
+	return ctrl.Result{Requeue: true}, nil
 }
