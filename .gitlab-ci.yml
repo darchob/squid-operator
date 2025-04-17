@@ -50,7 +50,8 @@ default:
   needs:
     - tool versions
   script:
-    - DESTINATION="${CI_REGISTRY_IMAGE}/${IMAGE_NAME}:${CI_COMMIT_SHORT_SHA}"
+    - if [ -z "$CI_COMMIT_TAG" ]; then export IMAGE_TAG=$CI_COMMIT_SHORT_SHA; else export IMAGE_TAG=$CI_COMMIT_TAG; fi
+    - DESTINATION="${CI_REGISTRY_IMAGE}/${IMAGE_NAME}:${IMAGE_TAG}"
     - echo $DESTINATION
     - echo "{\"auths\":{\"$CI_REGISTRY\":{\"auth\":\"$(echo -n ${CI_REGISTRY_USER}:${CI_REGISTRY_PASSWORD} | base64 | tr -d '\n')\"}}}" > /kaniko/.docker/config.json
     - /kaniko/executor
@@ -76,3 +77,72 @@ Build Operator:
   variables:
     DOCKERFILE: Dockerfile
     IMAGE_NAME: squid-operator
+
+
+# Documentation build job
+# This job builds the MkDocs documentation and publishes it as an artifact
+docs:
+  stage: docs
+  image: python:3.11-slim
+  script:
+    - pip install mkdocs mkdocs-material pymdown-extensions
+    - pip install mkdocs-mermaid2-plugin
+    # Build documentation
+    - mkdocs build
+  artifacts:
+    paths:
+      - site/
+    expire_in: 1 week
+  only:
+    - main
+    - tags
+
+# GitLab Pages deployment job
+Pages:
+  stage: docs
+  image: python:3.11-slim
+  needs:
+    - docs # This job depends on the Build Documentation job
+  script:
+    - mkdir -p public
+    - cp -r site/* public/  # GitLab Pages serves from the "public" directory
+  artifacts:
+    paths:
+      - public
+  only:
+    - main   # Deploy only from the main branch
+    - tags   # Deploy only from tags
+
+
+prepare_job:
+  stage: prepare
+  image: alpine:latest
+  rules:
+    - if: '$CI_COMMIT_TAG =~ /^v?\d+\.\d+\.\d+$/'
+  script:
+    - apk add curl jq
+    - 'curl -H "PRIVATE-TOKEN: $CI_API_TOKEN" "$CI_API_V4_URL/projects/$CI_PROJECT_ID/repository/changelog?version=$CI_COMMIT_TAG" | jq -r .notes > release_notes.md'
+    - 'curl -H "PRIVATE-TOKEN: $CI_API_TOKEN" -X POST "$CI_API_V4_URL/projects/$CI_PROJECT_ID/repository/changelog?version=$CI_COMMIT_TAG"'
+  artifacts:
+    paths:
+      - release_notes.md
+
+release_job:
+  stage: release
+  image: registry.gitlab.com/gitlab-org/release-cli:latest
+  needs:
+    - job: prepare_job
+      artifacts: true
+  rules:
+    - if: '$CI_COMMIT_TAG =~ /^v?\d+\.\d+\.\d+$/'
+  script:
+    - echo "Creating release"
+  release:
+    name: "Release $CI_COMMIT_TAG"
+    description: release_notes.md
+    tag_name: "$CI_COMMIT_TAG"
+    ref: "$CI_COMMIT_SHA"
+    assets:
+      links:
+        - name: "Container Image $CI_COMMIT_TAG"
+          url: "https://$CI_REGISTRY_IMAGE/$CI_COMMIT_REF_SLUG:$CI_COMMIT_SHA"
