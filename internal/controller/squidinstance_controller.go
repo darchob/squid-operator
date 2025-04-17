@@ -94,7 +94,7 @@ var managedResources = []ManagedResource{
 // +kubebuilder:rbac:groups=squid.cdk.clara.net,resources=squidinstances/status,verbs=get;update;patch
 // +kubebuilder:rbac:groups=squid.cdk.clara.net,resources=squidinstances/finalizers,verbs=update
 // +kubebuilder:rbac:groups="",resources=configmaps,verbs=get;list;watch;create;update;patch;delete
-// +kubebuilder:rbac:groups=apps,resources=deployments,verbs=get;list;watch;create;update;patch;delete
+// +kubebuilder:rbac:groups="",resources=deployments,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups="",resources=serviceaccounts,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups="",resources=events,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups="",resources=services,verbs=get;list;watch;create;update;patch;delete
@@ -193,7 +193,7 @@ func (r *SquidInstanceReconciler) reconcileSingleResource(ctx context.Context, i
 		return r.createResource(ctx, instance, resource)
 	}
 
-	return nil
+	return r.updateResource(ctx, instance, resource)
 }
 
 func (r *SquidInstanceReconciler) createResource(ctx context.Context, instance *squidv1.SquidInstance, resource ManagedResource) error {
@@ -209,6 +209,19 @@ func (r *SquidInstanceReconciler) createResource(ctx context.Context, instance *
 
 	r.Recorder.Event(instance, "Normal", "Created",
 		fmt.Sprintf("Created %T %s", newResource, newResource.GetName()))
+
+	return nil
+}
+
+func (r *SquidInstanceReconciler) updateResource(ctx context.Context, instance *squidv1.SquidInstance, resource ManagedResource) error {
+	newResource := resource.Generate(instance)
+
+	if err := r.Update(ctx, newResource); err != nil {
+		return fmt.Errorf("failed to create resource: %w", err)
+	}
+
+	r.Recorder.Event(instance, "Normal", "Updated",
+		fmt.Sprintf("Updated %T %s", newResource, newResource.GetName()))
 
 	return nil
 }

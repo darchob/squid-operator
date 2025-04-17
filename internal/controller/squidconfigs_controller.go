@@ -25,7 +25,6 @@ import (
 	squidv1 "git.fr.clara.net/claranet/healthcare/buildops/projects/kubernetes/operators/squid-operator/api/v1"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
-	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/client-go/tools/record"
 	ctrl "sigs.k8s.io/controller-runtime"
@@ -157,27 +156,21 @@ func (r *SquidConfigsReconciler) handlingReconciliation(ctx context.Context, con
 }
 
 func (r *SquidConfigsReconciler) handlingUpdate(ctx context.Context, configs *squidv1.SquidConfigs, err error, state state) (ctrl.Result, error) {
-	configs.Status.State = states[state]
-
-	if !configs.ObjectMeta.DeletionTimestamp.IsZero() {
-		configs.Status.State = states[deletion]
-		if !errors.IsConflict(err) {
-			return ctrl.Result{}, err
-		}
-
-		if !reflect.DeepEqual(configs.ObjectMeta.Finalizers, []string{}) {
-			configs.ObjectMeta.Finalizers = []string{}
-		}
-
-	}
+	config := configs.DeepCopy()
+	config.Status.State = states[state]
 
 	if !isDuplicateErr(err) {
-		configs.Status.State = states[failed]
+		config.Status.State = states[failed]
 	}
 
-	if err := r.Update(ctx, configs); err != nil {
+	if !config.ObjectMeta.DeletionTimestamp.IsZero() {
+		config.Status.State = states[deletion]
+		config.ObjectMeta.Finalizers = []string{}
+	}
+
+	if err := r.Update(ctx, config); err != nil {
 		return ctrl.Result{}, err
 	}
 
-	return ctrl.Result{Requeue: true}, nil
+	return ctrl.Result{}, nil
 }
