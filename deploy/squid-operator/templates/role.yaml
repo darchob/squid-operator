@@ -7,9 +7,9 @@ metadata:
   name: {{ include "squid-operator.fullname" . }}
 rules:
 - apiGroups:
-  - ""
+  - "*"
   resources:
-  - ""
+  - "*"
   verbs:
   - create
   - delete
