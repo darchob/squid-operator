@@ -35,6 +35,9 @@ stages:
   - build
   - test
   - publish
+  - docs
+  - prepare
+  - release
 
 default:
   tags:
