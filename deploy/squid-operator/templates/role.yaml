@@ -2,7 +2,9 @@
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRole
 metadata:
-  name: manager-role
+  labels:
+     {{- include "squid-operator.labels" . | nindent 4 }}
+  name: {{ include "squid-operator.fullname" . }}
 rules:
 - apiGroups:
   - ""
@@ -80,6 +82,7 @@ rules:
   - squid.cdk.clara.net
   resources:
   - squidconfigs
+  - squidinstances
   verbs:
   - create
   - delete
