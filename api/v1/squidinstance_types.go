@@ -18,7 +18,7 @@ package v1
 
 import (
 	autoscalingv1 "k8s.io/api/autoscaling/v1"
-	networkingv1 "k8s.io/api/networking/v1"
+	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
@@ -38,9 +38,6 @@ type SquidInstanceSpec struct {
 	Replicas *int32 `json:"replicas"`
 
 	HpaSpec autoscalingv1.HorizontalPodAutoscalerSpec `json:"hpaSpec,omitempty"`
-
-	// Specify the Squid ingress
-	IngressSpec networkingv1.IngressSpec `json:"ingressSpec"`
 
 	StorageClassName string `json:"storageClassName"`
 
@@ -64,7 +61,8 @@ type Image struct {
 
 // SquidInstanceStatus defines the observed state of SquidInstance
 type SquidInstanceStatus struct {
-	Health StatusPhase `json:"health,omitempty"`
+	Health       StatusPhase               `json:"health,omitempty"`
+	LoadBalancer corev1.LoadBalancerStatus `json:"loadBalancer,omitempty"`
 }
 
 //+kubebuilder:object:root=true
