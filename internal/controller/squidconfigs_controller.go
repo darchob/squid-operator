@@ -105,9 +105,7 @@ func (r *SquidConfigsReconciler) appendFinalizer(ctx context.Context, configs *s
 	log := log.FromContext(ctx).WithName(configs.Name)
 	log.Info("initialize", "squidConfig", configs.Name)
 
-	if reflect.DeepEqual(configs.ObjectMeta.Finalizers, []string{}) {
-		configs.ObjectMeta.Finalizers = append(configs.ObjectMeta.Finalizers, finalizerName)
-	}
+	configs.ObjectMeta.Finalizers = append(configs.ObjectMeta.Finalizers, finalizerName)
 
 	return r.handlingUpdate(ctx, configs, nil, applying)
 }
