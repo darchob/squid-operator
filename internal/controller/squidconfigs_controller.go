@@ -107,7 +107,11 @@ func (r *SquidConfigsReconciler) appendFinalizer(ctx context.Context, configs *s
 
 	configs.ObjectMeta.Finalizers = append(configs.ObjectMeta.Finalizers, finalizerName)
 
-	return r.handlingUpdate(ctx, configs, nil, applying)
+	if err := r.Update(ctx, configs); err != nil {
+		return ctrl.Result{}, err
+	}
+
+	return ctrl.Result{Requeue: false}, nil
 }
 
 func (r *SquidConfigsReconciler) handlingReconciliation(ctx context.Context, configs *squidv1.SquidConfigs) (ctrl.Result, error) {
