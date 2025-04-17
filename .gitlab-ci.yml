@@ -38,7 +38,8 @@ stages:
 
 default:
   tags:
-    - prj-internal-only
+    - tool-renovate
+    - clara-cloud
     - healthcare
 
 .build_image: &build_image
