@@ -127,8 +127,43 @@ type ValidatingWebhook struct {
 
 Webhooks:
 - Validation webhook for SquidConfig
+  - Validates configuration syntax using a validation job
+  - Checks for required instance annotation
+  - Ensures configuration is valid before creation/update
+  - Prevents deletion if config is still in use
 - Validation webhook for SquidInstance
+  - Validates image configuration
+  - Ensures storage class is specified
+  - Validates resource requirements
 - Defaulting webhook for resources
+  - Sets default image (ubuntu/squid)
+  - Sets default tag
+  - Sets default storage class (standard)
+
+### SquidConfig Validation
+
+The SquidConfig webhook performs the following validations:
+
+1. **Pre-Creation/Update Validation**
+   - Creates a validation job to test configuration
+   - Ensures required instance annotation is present
+   - Validates configuration syntax using squid -k parse
+   - Timeout of 2 minutes for validation
+
+2. **Pre-Deletion Validation**
+   - Checks if configuration is still in use
+   - Verifies configmap references
+   - Prevents deletion if configuration is active
+
+Example validation error:
+```yaml
+status:
+  conditions:
+  - type: Valid
+    status: "False"
+    reason: ValidationFailed
+    message: "Configuration validation failed: squid -k parse returned error"
+```
 
 ## Component Interactions
 
