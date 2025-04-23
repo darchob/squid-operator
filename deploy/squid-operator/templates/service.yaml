@@ -1,0 +1,29 @@
+apiVersion: v1
+kind: Service
+metadata:
+  metadata:
+  labels:
+    {{- include "squid-operator.labels" . | nindent 4 }}
+  name: {{ include "squid-operator.fullname" . }}-metrics-service
+spec:
+  ports:
+  - name: http
+    port: 8080
+    protocol: TCP
+    targetPort: 8080
+  selector:
+    control-plane: controller-manager
+---
+apiVersion: v1
+kind: Service
+metadata:
+  labels:
+    {{- include "squid-operator.labels" . | nindent 4 }}
+  name: {{ include "squid-operator.fullname" . }}-webhook-service
+spec:
+  ports:
+  - port: 443
+    protocol: TCP
+    targetPort: 9443
+  selector:
+    control-plane: controller-manager

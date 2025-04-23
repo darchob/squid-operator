@@ -30,6 +30,11 @@ spec:
       serviceAccountName: {{ include "squid-operator.serviceAccountName" . }}
       securityContext:
         runAsNonRoot: true
+      volumes:
+      - name: cert
+        secret:
+          defaultMode: 420
+          secretName: webhook-server-cert
       containers:
         - name: {{ .Chart.Name }}-manager
           securityContext:
@@ -47,6 +52,15 @@ spec:
             - --leader-elect
             - --health-probe-bind-address=:8081
             - --metrics-bind-address=0
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop:
+              - ALL
+          volumeMounts:
+          - mountPath: /tmp/k8s-webhook-server/serving-certs
+            name: cert
+            readOnly: true
           livenessProbe:
             httpGet:
               path: /healthz
@@ -59,6 +73,10 @@ spec:
               port: 8081
             initialDelaySeconds: 5
             periodSeconds: 10
+          ports:
+          - containerPort: 9443
+            name: webhook-server
+            protocol: TCP
           resources:
             limits:
               cpu: 500m
