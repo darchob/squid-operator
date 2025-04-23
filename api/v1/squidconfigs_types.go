@@ -18,6 +18,7 @@ package v1
 
 import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
 // EDIT THIS FILE!  THIS IS SCAFFOLDING FOR YOU TO OWN!
@@ -51,6 +52,7 @@ type SquidConfigs struct {
 
 	Spec   SquidConfigsSpec   `json:"spec,omitempty"`
 	Status SquidConfigsStatus `json:"status,omitempty"`
+	client client.Client      `json:"-"`
 }
 
 //+kubebuilder:object:root=true

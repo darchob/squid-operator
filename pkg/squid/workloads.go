@@ -60,7 +60,7 @@ func NewDeployment(sr *squidv1.SquidInstance) *appsv1.Deployment {
 					Containers: []corev1.Container{
 						{
 							Name:            sr.Name,
-							Image:           fmt.Sprintf("%s:%s", sr.Spec.Image.Repository, sr.Spec.Image.Tags),
+							Image:           fmt.Sprintf("%s:%s", sr.Spec.Image.Repository, sr.Spec.Image.Tag),
 							ImagePullPolicy: corev1.PullAlways,
 							VolumeMounts: []corev1.VolumeMount{
 								{
