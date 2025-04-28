@@ -110,6 +110,7 @@ func (r *SquidConfigs) ValidateDelete() (admission.Warnings, error) {
 
 func (r *SquidConfigs) validate(ctx context.Context) error {
 	squidInstance := &SquidInstance{}
+	job := &batchv1.Job{}
 	instanceName, ok := r.GetAnnotations()["squid.ckd.clara.net/instance"]
 	if !ok {
 		return fmt.Errorf("missing annotation squid.ckd.clara.net/instance")
@@ -119,7 +120,14 @@ func (r *SquidConfigs) validate(ctx context.Context) error {
 		return err
 	}
 
-	job := r.webhookJob(squidInstance.Spec.Image.Repository, squidInstance.Spec.Image.Tag)
+	job = r.webhookJob(squidInstance.Spec.Image.Repository, squidInstance.Spec.Image.Tag)
+	if err := r.client.Get(ctx, client.ObjectKey{Namespace: r.Namespace, Name: job.Name}, job); err != nil {
+		if client.IgnoreNotFound(err) != nil {
+			return err
+		}
+		return nil
+	}
+
 	if err := r.client.Create(ctx, job); err != nil {
 		return err
 	}
@@ -137,8 +145,8 @@ func (r *SquidConfigs) webhookJob(imageName, imageTag string) *batchv1.Job {
 
 	return &batchv1.Job{
 		ObjectMeta: metav1.ObjectMeta{
-			GenerateName: fmt.Sprintf("validate-%s-", r.Name),
-			Namespace:    r.Namespace,
+			Name:      fmt.Sprintf("validate-%s-", r.Name),
+			Namespace: r.Namespace,
 		},
 		Spec: batchv1.JobSpec{
 			Template: corev1.PodTemplateSpec{
