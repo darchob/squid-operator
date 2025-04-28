@@ -109,12 +109,16 @@ func (r *SquidConfigs) ValidateDelete() (admission.Warnings, error) {
 }
 
 func (r *SquidConfigs) validate(ctx context.Context) error {
-	job := r.webhookJob()
-
-	if _, ok := r.GetAnnotations()["squid.ckd.clara.net/instance"]; !ok {
+	squidInstance := &SquidInstance{}
+	instanceName, ok := r.GetAnnotations()["squid.ckd.clara.net/instance"]
+	if !ok {
 		return fmt.Errorf("missing annotation squid.ckd.clara.net/instance")
 	}
 
+	if err := r.client.Get(ctx, client.ObjectKey{Namespace: r.Namespace, Name: instanceName}, squidInstance); err != nil {
+		return admission.Warnings{"could not delete configs"}, err
+	}
+	job := r.webhookJob(squidInstance.Spec.Image.Repository, squidInstance.Spec.Image.Tag)
 	if err := r.client.Create(ctx, job); err != nil {
 		return err
 	}
@@ -126,9 +130,10 @@ func (r *SquidConfigs) validate(ctx context.Context) error {
 	return nil
 }
 
-func (r *SquidConfigs) webhookJob() *batchv1.Job {
+func (r *SquidConfigs) webhookJob(imageName, imageTag string) *batchv1.Job {
 	spec := r.Spec.DeepCopy()
 	copyCommand := fmt.Sprintf("echo '%s' > /etc/squid/conf.d/00-squid.conf && squid -k parse -f /etc/squid/conf.d/00-squid.conf", spec.Rules)
+
 	return &batchv1.Job{
 		ObjectMeta: metav1.ObjectMeta{
 			GenerateName: fmt.Sprintf("validate-%s-", r.Name),
@@ -141,7 +146,7 @@ func (r *SquidConfigs) webhookJob() *batchv1.Job {
 					Containers: []corev1.Container{
 						{
 							Name:            "validator",
-							Image:           fmt.Sprintf("%s:%s", DefaultImage, DefaultTag),
+							Image:           fmt.Sprintf("%s:%s", imageName, imageTag),
 							ImagePullPolicy: corev1.PullAlways,
 							Command:         []string{"/bin/sh", "-c", copyCommand},
 						},
