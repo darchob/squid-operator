@@ -131,8 +131,8 @@ func (r *SquidConfigs) webhookJob() *batchv1.Job {
 	copyCommand := fmt.Sprintf("echo '%s' > /etc/squid/conf.d/00-squid.conf && squid -k parse -f /etc/squid/conf.d/00-squid.conf", spec.Rules)
 	return &batchv1.Job{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      "validate-" + r.Name,
-			Namespace: r.Namespace,
+			GenerateName: fmt.Sprintf("validate-%s-", r.Name),
+			Namespace:    r.Namespace,
 		},
 		Spec: batchv1.JobSpec{
 			Template: corev1.PodTemplateSpec{
