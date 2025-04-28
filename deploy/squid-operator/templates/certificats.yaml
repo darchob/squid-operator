@@ -10,6 +10,6 @@ spec:
   - {{ include "squid-operator.fullname" . }}-metrics-service.{{ .Release.Namespace }}.svc
   - {{ include "squid-operator.fullname" . }}-metrics-service.{{ .Release.Namespace }}.svc.cluster.local
   issuerRef:
-    kind: clusterIssuer
+    kind: ClusterIssuer
     name: selfsigned-issuer
   secretName: squid-webhook-server-cert # this secret will not be prefixed, since it's not managed by kustomize
