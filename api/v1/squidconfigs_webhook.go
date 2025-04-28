@@ -116,7 +116,7 @@ func (r *SquidConfigs) validate(ctx context.Context) error {
 	}
 
 	if err := r.client.Get(ctx, client.ObjectKey{Namespace: r.Namespace, Name: instanceName}, squidInstance); err != nil {
-		return admission.Warnings{"could not delete configs"}, err
+		return err
 	}
 	job := r.webhookJob(squidInstance.Spec.Image.Repository, squidInstance.Spec.Image.Tag)
 	if err := r.client.Create(ctx, job); err != nil {
