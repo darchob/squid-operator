@@ -170,7 +170,7 @@ func (r *SquidConfigs) waitForJobCompletion(ctx context.Context, jobName string)
 				Namespace: r.Namespace,
 				Name:      jobName,
 			}, &job); err != nil {
-				if client.IgnoreNotFound(err) == nil {
+				if client.IgnoreNotFound(err) != nil {
 					return false, err
 				}
 			}
