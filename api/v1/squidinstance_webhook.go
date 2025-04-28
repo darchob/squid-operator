@@ -36,7 +36,7 @@ func (r *SquidInstance) SetupWebhookWithManager(mgr ctrl.Manager) error {
 
 const (
 	DefaultImage        = "ubuntu/squid"
-	DefaultTag          = "ubuntu/squid"
+	DefaultTag          = "latest"
 	DefaultStorageClass = "standard"
 )
 
