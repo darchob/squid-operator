@@ -7,8 +7,8 @@ metadata:
 spec:
   # SERVICE_NAME and SERVICE_NAMESPACE will be substituted by kustomize
   dnsNames:
-  - {{ include "squid-operator.fullname" . }}-metrics-service.{{ .Release.Namespace }}.svc
-  - {{ include "squid-operator.fullname" . }}-metrics-service.{{ .Release.Namespace }}.svc.cluster.local
+  - {{ include "squid-operator.fullname" . }}-service.{{ .Release.Namespace }}.svc
+  - {{ include "squid-operator.fullname" . }}-service.{{ .Release.Namespace }}.svc.cluster.local
   issuerRef:
     kind: ClusterIssuer
     name: selfsigned-issuer
