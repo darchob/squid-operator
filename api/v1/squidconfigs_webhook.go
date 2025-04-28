@@ -125,7 +125,6 @@ func (r *SquidConfigs) validate(ctx context.Context) error {
 		if client.IgnoreNotFound(err) != nil {
 			return err
 		}
-		return nil
 	}
 
 	if err := r.client.Create(ctx, job); err != nil {
