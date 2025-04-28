@@ -144,7 +144,7 @@ func (r *SquidConfigs) webhookJob(imageName, imageTag string) *batchv1.Job {
 
 	return &batchv1.Job{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      fmt.Sprintf("validate-%s-", r.Name),
+			Name:      fmt.Sprintf("validate-%s", r.Name),
 			Namespace: r.Namespace,
 		},
 		Spec: batchv1.JobSpec{

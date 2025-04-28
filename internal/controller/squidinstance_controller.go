@@ -125,7 +125,6 @@ func (r *SquidInstanceReconciler) SetupWithManager(mgr ctrl.Manager) error {
 		Owns(&corev1.PersistentVolumeClaim{}).
 		Watches(&corev1.ConfigMap{}, handler.EnqueueRequestsFromMapFunc(func(ctx context.Context, obj client.Object) []reconcile.Request {
 			log := log.FromContext(ctx).WithName("ConfigMap")
-			log.Info("ConfigMap changed", "name", obj.GetName())
 
 			var squidInstanceList squidv1.SquidInstanceList
 			if err := r.List(ctx, &squidInstanceList); err != nil {
@@ -136,6 +135,7 @@ func (r *SquidInstanceReconciler) SetupWithManager(mgr ctrl.Manager) error {
 			var requests []reconcile.Request
 			for _, instance := range squidInstanceList.Items {
 				if instance.Name == obj.GetName() {
+					log.Info("ConfigMap changed", "name", obj.GetName())
 					requests = append(requests, reconcile.Request{
 						NamespacedName: client.ObjectKey{
 							Namespace: instance.Namespace,
