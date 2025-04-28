@@ -6,16 +6,6 @@ metadata:
     controller-gen.kubebuilder.io/version: v0.14.0
   name: squidconfigs.squid.cdk.clara.net
 spec:
-  conversion:
-    strategy: Webhook
-    webhook:
-      clientConfig:
-        service:
-          name: squid-operator-webhook-service
-          namespace: squid-operator-system
-          path: /convert
-      conversionReviewVersions:
-      - v1
   group: squid.cdk.clara.net
   names:
     kind: SquidConfigs
@@ -25,12 +15,10 @@ spec:
   scope: Namespaced
   versions:
   - additionalPrinterColumns:
-    - jsonPath: .status.merged
-      name: Merged
-      type: boolean
-    - jsonPath: .status.apply
-      name: Applied
-      type: boolean
+    - description: State of the SquidConfigs
+      jsonPath: .status.state
+      name: State
+      type: string
     name: v1
     schema:
       openAPIV3Schema:

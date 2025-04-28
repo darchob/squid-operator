@@ -15,12 +15,10 @@ spec:
   scope: Namespaced
   versions:
   - additionalPrinterColumns:
-    - jsonPath: .status.merged
-      name: Merged
-      type: boolean
-    - jsonPath: .status.apply
-      name: Applied
-      type: boolean
+    - description: State of the SquidConfigs
+      jsonPath: .status.state
+      name: State
+      type: string
     name: v1
     schema:
       openAPIV3Schema:

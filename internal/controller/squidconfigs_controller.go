@@ -31,7 +31,6 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 	"sigs.k8s.io/controller-runtime/pkg/log"
-	"sigs.k8s.io/controller-runtime/pkg/predicate"
 )
 
 type state int
@@ -97,7 +96,7 @@ func (r *SquidConfigsReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	return ctrl.NewControllerManagedBy(mgr).
 		For(&squidv1.SquidConfigs{}).
 		// WithEventFilter(predicate.ResourceVersionChangedPredicate{}).
-		WithEventFilter(predicate.GenerationChangedPredicate{}).
+		// WithEventFilter(predicate.GenerationChangedPredicate{}).
 		Complete(r)
 }
 

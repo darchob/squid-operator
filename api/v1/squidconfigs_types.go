@@ -42,8 +42,7 @@ type SquidConfigsStatus struct {
 
 //+kubebuilder:object:root=true
 //+kubebuilder:subresource:status
-// +kubebuilder:printcolumn:name="Merged",type="boolean",JSONPath=".status.merged"
-// +kubebuilder:printcolumn:name="Applied",type="boolean",JSONPath=".status.apply"
+// +kubebuilder:printcolumn:name="State",type="string",JSONPath=".status.state",description="State of the SquidConfigs"
 
 // SquidConfigs is the Schema for the squidconfigs API
 type SquidConfigs struct {
