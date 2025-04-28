@@ -209,6 +209,10 @@ func (r *SquidInstanceReconciler) updateResource(ctx context.Context, instance *
 	switch obj := newResource.(type) {
 	case *corev1.PersistentVolumeClaim:
 		return nil
+	case *corev1.ConfigMap:
+		if obj.Data != nil {
+			return nil
+		}
 	case *corev1.Service:
 		if len(obj.Status.LoadBalancer.Ingress) == 0 {
 			return nil
