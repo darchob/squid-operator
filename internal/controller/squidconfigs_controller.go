@@ -91,7 +91,6 @@ func (r *SquidConfigsReconciler) Reconcile(ctx context.Context, req ctrl.Request
 
 // SetupWithManager sets up the controller with the Manager.
 func (r *SquidConfigsReconciler) SetupWithManager(mgr ctrl.Manager) error {
-
 	return ctrl.NewControllerManagedBy(mgr).
 		For(&squidv1.SquidConfigs{}).
 		// WithEventFilter(predicate.ResourceVersionChangedPredicate{}).
@@ -172,5 +171,5 @@ func (r *SquidConfigsReconciler) handlingUpdate(ctx context.Context, configs *sq
 		return ctrl.Result{}, err
 	}
 
-	return ctrl.Result{Requeue: true}, nil
+	return ctrl.Result{}, nil
 }
