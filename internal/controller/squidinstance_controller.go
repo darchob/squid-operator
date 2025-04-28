@@ -19,7 +19,6 @@ package controller
 import (
 	"context"
 	"fmt"
-	"time"
 
 	squidv1 "git.fr.clara.net/claranet/healthcare/buildops/projects/kubernetes/operators/squid-operator/api/v1"
 	squid "git.fr.clara.net/claranet/healthcare/buildops/projects/kubernetes/operators/squid-operator/pkg/squid"
@@ -237,17 +236,19 @@ func (r *SquidInstanceReconciler) updateResource(ctx context.Context, instance *
 	case *corev1.PersistentVolumeClaim:
 		return nil
 	case *corev1.ConfigMap:
-		deployment := &appsv1.Deployment{}
-		if err := r.Get(ctx, client.ObjectKey{Namespace: obj.Namespace, Name: obj.Name}, deployment); err != nil {
-			return err
-		}
+		// object := &appsv1.Deployment{}
+		// if err := r.Get(ctx, client.ObjectKey{Namespace: obj.Namespace, Name: obj.Name}, object); err != nil {
+		// 	return err
+		// }
 
-		deployment.Spec.Template.ObjectMeta.Annotations["squid-operator.kubernetes.io/restartedAt"] = time.Now().Format(time.RFC3339)
-		if err := r.Update(ctx, deployment); err != nil {
-			return fmt.Errorf("failed to update deployment on configmap updated event %w", err)
-		}
-		r.Recorder.Event(instance, "Normal", "Updated",
-			fmt.Sprintf("Updated %T %s on configmap changed", deployment, newResource.GetName()))
+		// deployment := object.DeepCopy()
+		// deployment.Spec.Template.ObjectMeta.Annotations["squid-operator.kubernetes.io/restartedAt"] = time.Now().Format(time.RFC3339)
+		// if err := r.Update(ctx, deployment); err != nil {
+		// 	return fmt.Errorf("failed to update deployment on configmap updated event %w", err)
+		// }
+
+		// r.Recorder.Event(instance, "Normal", "Updated",
+		// 	fmt.Sprintf("Updated %T %s on configmap changed", deployment, newResource.GetName()))
 
 		return nil
 	case *corev1.Service:
