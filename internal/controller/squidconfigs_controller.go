@@ -20,10 +20,8 @@ import (
 	"context"
 	"fmt"
 	"reflect"
-	"time"
 
 	squidv1 "git.fr.clara.net/claranet/healthcare/buildops/projects/kubernetes/operators/squid-operator/api/v1"
-	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/client-go/tools/record"
@@ -93,6 +91,7 @@ func (r *SquidConfigsReconciler) Reconcile(ctx context.Context, req ctrl.Request
 
 // SetupWithManager sets up the controller with the Manager.
 func (r *SquidConfigsReconciler) SetupWithManager(mgr ctrl.Manager) error {
+
 	return ctrl.NewControllerManagedBy(mgr).
 		For(&squidv1.SquidConfigs{}).
 		// WithEventFilter(predicate.ResourceVersionChangedPredicate{}).
@@ -117,7 +116,7 @@ func (r *SquidConfigsReconciler) handlingReconciliation(ctx context.Context, con
 	_ = log.FromContext(ctx).WithName(configs.Name)
 
 	objectsList := []client.Object{
-		&appsv1.Deployment{},
+		// &appsv1.Deployment{},
 		&corev1.ConfigMap{},
 	}
 
@@ -142,12 +141,12 @@ func (r *SquidConfigsReconciler) handlingReconciliation(ctx context.Context, con
 			if err := r.Update(ctx, configmap); err != nil {
 				return r.handlingUpdate(ctx, configs, err, failed)
 			}
-		case *appsv1.Deployment:
-			deployment := obj.DeepCopy()
-			deployment.Spec.Template.ObjectMeta.Annotations["squid-operator.kubernetes.io/restartedAt"] = time.Now().Format(time.RFC3339)
-			if err := r.Update(ctx, deployment); err != nil {
-				return r.handlingUpdate(ctx, configs, err, failed)
-			}
+			// case *appsv1.Deployment:
+			// 	deployment := obj.DeepCopy()
+			// 	deployment.Spec.Template.ObjectMeta.Annotations["squid-operator.kubernetes.io/restartedAt"] = time.Now().Format(time.RFC3339)
+			// 	if err := r.Update(ctx, deployment); err != nil {
+			// 		return r.handlingUpdate(ctx, configs, err, failed)
+			// 	}
 		}
 
 		r.Recorder.Event(configs, "Normal", "Updated", fmt.Sprintf("%s %s has been updated", reflect.TypeOf(object).String(), object.GetName()))
