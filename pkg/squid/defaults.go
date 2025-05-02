@@ -23,7 +23,7 @@ func Labels(obj interface{}) map[string]string {
 	case *squidv1.SquidInstance:
 		return map[string]string{
 			"app.kubernetes.io/name":       sr.Name,
-			"app.kubernetes.io/version":    sr.Spec.Image.Tags,
+			"app.kubernetes.io/version":    sr.Spec.Image.Tag,
 			"app.kubernetes.io/part-of":    fmt.Sprintf("squid-%s", sr.Name),
 			"app.kubernetes.io/managed-by": "squid-operator",
 		}

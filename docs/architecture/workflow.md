@@ -12,19 +12,52 @@ The Squid Operator manages two main custom resources:
 ## Workflow Diagram
 
 ```mermaid
-graph TD
-    A[SquidInstance Created] --> B[Create ConfigMap]
-    B --> C[ConfigMap Ready]
-    C --> D[Deploy Squid]
-    D --> E[Monitor Status]
-    E --> F[Update Status]
+flowchart TD
+    %% Styling
+    classDef success fill:#d4edda,stroke:#c3e6cb,color:#155724,stroke-width:2px,stroke-dasharray: 0
+    classDef warning fill:#fff3cd,stroke:#ffeeba,color:#856404,stroke-width:2px,stroke-dasharray: 0
+    classDef danger fill:#f8d7da,stroke:#f5c6cb,color:#721c24,stroke-width:2px,stroke-dasharray: 0
+    classDef info fill:#d1ecf1,stroke:#bee5eb,color:#0c5460,stroke-width:2px,stroke-dasharray: 0
+    classDef primary fill:#cce5ff,stroke:#b8daff,color:#004085,stroke-width:2px,stroke-dasharray: 0
 
-    G[SquidConfig Created] --> H[Update ConfigMap Data]
-    H --> I[Trigger Reconciliation]
-    I --> J[Reload Squid]
-    J --> E
+    %% SquidInstance Flow
+    subgraph SquidInstance["SquidInstance Flow"]
+        direction TB
+        A([SquidInstance Created]):::primary -->|Create| B([Webhook Validation]):::info
+        B -->|Validate| C([Create ConfigMap]):::primary
+        C -->|Create| D([ConfigMap Ready]):::success
+        D -->|Deploy| E([Deploy Squid]):::primary
+        E -->|Monitor| F([Monitor Status]):::info
+        F -->|Update| G([Update Status]):::success
+    end
 
-    K[SquidConfig Updated] --> H
+    %% SquidConfig Flow
+    subgraph SquidConfig["SquidConfig Flow"]
+        direction TB
+        H([SquidConfig Created]):::primary -->|Create| I([Webhook Validation]):::info
+        I -->|Validate| J([Create Validation Job]):::primary
+        J -->|Run| K([Validate Config]):::info
+        K -->|Update| L([Update ConfigMap Data]):::primary
+        L -->|Trigger| M([Trigger Reconciliation]):::info
+        M -->|Reload| N([Reload Squid]):::primary
+        N -->|Monitor| F
+    end
+
+    %% Update Flow
+    O([SquidConfig Updated]):::warning -.->|Update| I
+
+    %% Delete Flow
+    subgraph Deletion["Deletion Flow"]
+        direction TB
+        P([SquidConfig Deleted]):::danger -->|Validate| Q([Webhook Validation]):::info
+        Q -->|Check| R([Check Config Usage]):::info
+        R -->|Allow/Deny| S([Allow/Deny Deletion]):::danger
+    end
+
+    %% Link styles
+    linkStyle default stroke:#666,stroke-width:2px
+    linkStyle 0,1,2,3,4,5,6,7,8,9,10,11,12,13,14 stroke:#666,stroke-width:2px
+    linkStyle 15 stroke:#666,stroke-width:2px,stroke-dasharray: 5 5
 ```
 
 ## Detailed Workflow
@@ -33,9 +66,13 @@ graph TD
 
 When a SquidInstance is created:
 
-1. The operator creates a ConfigMap for the Squid configuration
-2. Creates the necessary Kubernetes resources
-3. Deploys the Squid proxy with the configuration
+1. The webhook validates the instance configuration
+   - Checks image configuration
+   - Validates storage class
+   - Ensures resource requirements
+2. The operator creates a ConfigMap for the Squid configuration
+3. Creates the necessary Kubernetes resources
+4. Deploys the Squid proxy with the configuration
 
 ```yaml
 apiVersion: squid.claranet.fr/v1
@@ -46,17 +83,23 @@ metadata:
 spec:
   replicas: 1
   image:
-    repository: squid
+    repository: ubuntu/squid
     tag: latest
+  storageClassName: standard
 ```
 
 ### 2. SquidConfig Creation/Update
 
 When a SquidConfig is created or updated:
 
-1. The operator updates the data in the existing ConfigMap
-2. Triggers reconciliation of the affected SquidInstance
-3. Reloads the Squid configuration in the running pods
+1. The webhook performs validation:
+   - Creates a validation job
+   - Ensures required instance annotation
+   - Validates configuration syntax using squid -k parse
+   - Timeout of 2 minutes for validation
+2. The operator updates the data in the existing ConfigMap
+3. Triggers reconciliation of the affected SquidInstance
+4. Reloads the Squid configuration in the running pods
 
 ```yaml
 apiVersion: squid.claranet.fr/v1
@@ -64,6 +107,8 @@ kind: SquidConfig
 metadata:
   name: my-squid-config
   namespace: squid-proxy
+  annotations:
+    squid.ckd.clara.net/instance: my-squid
 spec:
   config: |
     http_port 3128
@@ -71,7 +116,18 @@ spec:
     acl Safe_ports port 80
 ```
 
-### 3. Configuration Updates
+### 3. SquidConfig Deletion
+
+When a SquidConfig is deleted:
+
+1. The webhook performs pre-deletion validation:
+   - Checks if configuration is still in use
+   - Verifies configmap references
+   - Prevents deletion if configuration is active
+2. If validation passes, the resource is deleted
+3. The operator updates the affected SquidInstance
+
+### 4. Configuration Updates
 
 When a SquidConfig is updated:
 
@@ -95,7 +151,7 @@ func (r *SquidInstanceReconciler) handleConfigUpdate(ctx context.Context, instan
 }
 ```
 
-### 4. Status Management
+### 5. Status Management
 
 The operator maintains status information for both resources:
 
@@ -117,16 +173,24 @@ type SquidInstanceStatus struct {
    - Use separate SquidConfigs for different environments
    - Version control your configurations
    - Test configurations before applying
+   - Always include the required instance annotation
 
 2. **Instance Management**
    - Create instances in the same namespace as their configs
    - Monitor instance health
    - Use appropriate resource limits
+   - Ensure storage class is properly configured
 
 3. **Updates**
    - Plan configuration changes
    - Test updates in staging
    - Monitor for issues
+   - Be aware of the 2-minute validation timeout
+
+4. **Deletion**
+   - Check for active usage before deleting configurations
+   - Ensure proper cleanup of related resources
+   - Monitor for any orphaned resources
 
 ## Next Steps
 

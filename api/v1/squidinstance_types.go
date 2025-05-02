@@ -42,19 +42,19 @@ type SquidInstanceSpec struct {
 	StorageClassName string `json:"storageClassName"`
 
 	// Specify the Squid container image to use
-	Image Image `json:"image"`
+	Image *Image `json:"image"`
 }
 
-// Defines the repository and tag image
-type JoinedConfig struct {
-	Version string `json:"version"`
-	Name    string `json:"name"`
-}
+// // Defines the repository and tag image
+// type JoinedConfig struct {
+// 	Version string `json:"version"`
+// 	Name    string `json:"name"`
+// }
 
 // Defines the repository and tag image
 type Image struct {
 	// The image tag
-	Tags string `json:"tag"`
+	Tag string `json:"tag"`
 	// The image repository
 	Repository string `json:"repository"`
 }

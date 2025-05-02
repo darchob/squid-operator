@@ -1,0 +1,103 @@
+apiVersion: admissionregistration.k8s.io/v1
+kind: MutatingWebhookConfiguration
+metadata:
+  annotations:
+    cert-manager.io/inject-ca-from: {{ .Release.Namespace }}/{{ include "squid-operator.fullname" . }}-serving-cert
+  labels:
+    {{- include "squid-operator.labels" . | nindent 4 }}
+  name: {{ include "squid-operator.fullname" . }}-mutating-webhook-configuration
+webhooks:
+- admissionReviewVersions:
+  - v1
+  clientConfig:
+    service:
+      name: {{ include "squid-operator.fullname" . }}-webhook-service
+      namespace: {{ .Release.Namespace }}
+      path: /mutate-squid-cdk-clara-net-v1-squidconfigs
+  failurePolicy: Fail
+  name: msquidconfigs.kb.io
+  rules:
+  - apiGroups:
+    - squid.cdk.clara.net
+    apiVersions:
+    - v1
+    operations:
+    - CREATE
+    - UPDATE
+    resources:
+    - squidconfigs
+  sideEffects: None
+  timeoutSeconds: 30
+- admissionReviewVersions:
+  - v1
+  clientConfig:
+    service:
+      name: {{ include "squid-operator.fullname" . }}-webhook-service
+      namespace: {{ .Release.Namespace }}
+      path: /mutate-squid-cdk-clara-net-v1-squidinstance
+  failurePolicy: Fail
+  name: msquidinstance.kb.io
+  rules:
+  - apiGroups:
+    - squid.cdk.clara.net
+    apiVersions:
+    - v1
+    operations:
+    - CREATE
+    - UPDATE
+    resources:
+    - squidinstances
+  sideEffects: None
+  timeoutSeconds: 30
+---
+apiVersion: admissionregistration.k8s.io/v1
+kind: ValidatingWebhookConfiguration
+metadata:
+  annotations:
+    cert-manager.io/inject-ca-from: {{ .Release.Namespace }}/{{ include "squid-operator.fullname" . }}-serving-cert
+  labels:
+    {{- include "squid-operator.labels" . | nindent 4 }}
+  name: {{ include "squid-operator.fullname" . }}-validating-webhook-configuration
+webhooks:
+- admissionReviewVersions:
+  - v1
+  clientConfig:
+    service:
+      name: {{ include "squid-operator.fullname" . }}-webhook-service
+      namespace: {{ .Release.Namespace }}
+      path: /validate-squid-cdk-clara-net-v1-squidconfigs
+  failurePolicy: Fail
+  name: vsquidconfigs.kb.io
+  rules:
+  - apiGroups:
+    - squid.cdk.clara.net
+    apiVersions:
+    - v1
+    operations:
+    - CREATE
+    - UPDATE
+    resources:
+    - squidconfigs
+  sideEffects: None
+  timeoutSeconds: 30
+- admissionReviewVersions:
+  - v1
+  clientConfig:
+    service:
+      name: {{ include "squid-operator.fullname" . }}-webhook-service
+      namespace: {{ .Release.Namespace }}
+      path: /validate-squid-cdk-clara-net-v1-squidinstance
+  failurePolicy: Fail
+  name: vsquidinstance.kb.io
+  rules:
+  - apiGroups:
+    - squid.cdk.clara.net
+    apiVersions:
+    - v1
+    operations:
+    - CREATE
+    - UPDATE
+    resources:
+    - squidinstances
+  sideEffects: None
+  timeoutSeconds: 30
