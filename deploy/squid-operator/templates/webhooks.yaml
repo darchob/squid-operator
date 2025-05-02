@@ -27,7 +27,7 @@ webhooks:
     resources:
     - squidconfigs
   sideEffects: None
-  timeoutSeconds: 50
+  timeoutSeconds: 30
 - admissionReviewVersions:
   - v1
   clientConfig:
@@ -48,7 +48,7 @@ webhooks:
     resources:
     - squidinstances
   sideEffects: None
-  timeoutSeconds: 50
+  timeoutSeconds: 30
 ---
 apiVersion: admissionregistration.k8s.io/v1
 kind: ValidatingWebhookConfiguration
@@ -79,7 +79,7 @@ webhooks:
     resources:
     - squidconfigs
   sideEffects: None
-  timeoutSeconds: 50
+  timeoutSeconds: 30
 - admissionReviewVersions:
   - v1
   clientConfig:
@@ -100,4 +100,4 @@ webhooks:
     resources:
     - squidinstances
   sideEffects: None
-  timeoutSeconds: 50
+  timeoutSeconds: 30
