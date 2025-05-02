@@ -121,12 +121,6 @@ func (r *SquidConfigs) validate(ctx context.Context) error {
 	}
 
 	job = r.webhookJob(squidInstance.Spec.Image.Repository, squidInstance.Spec.Image.Tag)
-	if err := r.client.Get(ctx, client.ObjectKey{Namespace: r.Namespace, Name: job.Name}, job); err != nil {
-		if client.IgnoreNotFound(err) != nil {
-			return err
-		}
-	}
-
 	if err := r.client.Create(ctx, job); err != nil {
 		return err
 	}
@@ -144,8 +138,8 @@ func (r *SquidConfigs) webhookJob(imageName, imageTag string) *batchv1.Job {
 
 	return &batchv1.Job{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      fmt.Sprintf("validate-%s", r.Name),
-			Namespace: r.Namespace,
+			GenerateName: fmt.Sprintf("validate-%s-", r.Name),
+			Namespace:    r.Namespace,
 		},
 		Spec: batchv1.JobSpec{
 			Template: corev1.PodTemplateSpec{
