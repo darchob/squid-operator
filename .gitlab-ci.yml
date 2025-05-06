@@ -2,24 +2,17 @@ include:
   - project: claranet/guildes/pipeline/helpers
     ref: v4.0.0
     file: tool_versions.yml
-  - project: "claranet/smartinfra/tooling/projects/templates/golang"
-    file: "/gitlab-ci.yml"
+  - project: claranet/smartinfra/tooling/projects/templates/golang
+    ref: main
+    file: gitlab-ci.yml
 
 variables:
-  PROXY_ADDRESS: http://10.195.1.23:3128/
   KUBERNETES_CPU_REQUEST: "1"
   KUBERNETES_MEMORY_LIMIT: "2Gi"
   KUBERNETES_MEMORY_REQUEST: "2Gi"
-  ftp_proxy: "${PROXY_ADDRESS}"
-  FTP_PROXY: "${PROXY_ADDRESS}"
-  http_proxy: "${PROXY_ADDRESS}"
-  HTTP_PROXY: "${PROXY_ADDRESS}"
-  https_proxy: "${PROXY_ADDRESS}"
-  HTTPS_PROXY: "${PROXY_ADDRESS}"
-  no_proxy: "localhost,127.0.0.0/8"
-  NO_PROXY: "localhost,127.0.0.0/8"
 
 stages:
+  - test
   - build
   - publish
   - docs
@@ -28,9 +21,20 @@ stages:
 
 default:
   tags:
-    - tool-renovate
-    - clara-cloud
-    - healthcare
+    - ops4ops-kubernetes
+
+golangci-lint:
+  stage: test
+  allow_failure: true
+  extends:
+    - .golangci_lint
+
+#gotest:
+#  stage: test
+#  extends:
+#    - .go_test
+#  image:
+#    name: golang:1.22
 
 .build_image: &build_image
   stage: build

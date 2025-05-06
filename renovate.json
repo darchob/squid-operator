@@ -1,0 +1,30 @@
+{
+  "$schema": "https://docs.renovatebot.com/renovate-schema.json",
+  "extends": [
+    "local>claranet/guildes/pipeline/renovatebot/renovate-config"
+  ],
+  "prHourlyLimit": 5,
+  "packageRules": [
+    {
+      "matchManagers": ["gomod"],
+      "groupName": "Go Dependencies",
+      "groupSlug": "go-dependencies"
+    },
+    {
+      "matchCategories": ["docker"],
+      "groupName": "docker"
+    },
+    {
+      "matchCategories": ["python"],
+      "groupName": "Mkdocs Python Dependencies",
+      "groupSlug": "python-mkdocs",
+      "automerge": true
+    },
+    {
+      "matchManagers": ["pre-commit", "asdf"],
+      "groupName": "CI Tools",
+      "groupSlug": "ci-tools",
+      "automerge": true
+    }
+  ]
+}
