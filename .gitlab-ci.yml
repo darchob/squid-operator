@@ -1,6 +1,6 @@
 include:
   - project: claranet/guildes/pipeline/helpers
-    ref: v4.0.0
+    ref: v4.9.0
     file: tool_versions.yml
   - project: claranet/smartinfra/tooling/projects/templates/golang
     ref: main
