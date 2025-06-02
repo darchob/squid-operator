@@ -77,7 +77,7 @@ Build Operator:
 # This job builds the MkDocs documentation and publishes it as an artifact
 docs:
   stage: docs
-  image: python:3.11-slim
+  image: python:3.13-slim
   script:
     - pip install -r requirements.txt
     # Build documentation
@@ -93,7 +93,7 @@ docs:
 # GitLab Pages deployment job
 Pages:
   stage: docs
-  image: python:3.11-slim
+  image: python:3.13-slim
   needs:
     - docs # This job depends on the Build Documentation job
   script:
