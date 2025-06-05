@@ -35,7 +35,9 @@ const (
 )
 
 func warnError(err error) {
-	fmt.Fprintf(GinkgoWriter, "warning: %v\n", err)
+	if _, err = fmt.Fprintf(GinkgoWriter, "warning: %v\n", err); err != nil {
+		fmt.Println("error writing warning message:", err)
+	}
 }
 
 // InstallPrometheusOperator installs the prometheus Operator to be used to export the enabled metrics.
@@ -57,7 +59,10 @@ func Run(cmd *exec.Cmd) ([]byte, error) {
 
 	cmd.Env = append(os.Environ(), "GO111MODULE=on")
 	command := strings.Join(cmd.Args, " ")
-	fmt.Fprintf(GinkgoWriter, "running: %s\n", command)
+	if _, err := fmt.Fprintf(GinkgoWriter, "running: %s\n", command); err != nil {
+		fmt.Println("running message:", err)
+	}
+
 	output, err := cmd.CombinedOutput()
 	if err != nil {
 		return output, fmt.Errorf("%s failed with error: (%v) %s", command, err, string(output))

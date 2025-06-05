@@ -37,9 +37,12 @@ import (
 // log is for logging in this package.
 var squidconfigslog = logf.Log.WithName("squidconfigs-resource")
 
+// client is used for the webhook operations
+var squidConfigsClient client.Client
+
 // SetupWebhookWithManager will setup the manager to manage the webhooks
 func (r *SquidConfigs) SetupWebhookWithManager(mgr ctrl.Manager) error {
-	r.client = mgr.GetClient()
+	squidConfigsClient = mgr.GetClient()
 	return ctrl.NewWebhookManagedBy(mgr).
 		For(r).
 		Complete()
@@ -97,7 +100,7 @@ func (r *SquidConfigs) ValidateDelete() (admission.Warnings, error) {
 	dataKey := fmt.Sprintf("%s.conf", r.Name)
 	configMapName := r.GetAnnotations()["squid.ckd.clara.net/instance"]
 
-	if err := r.client.Get(ctx, client.ObjectKey{Namespace: r.Namespace, Name: configMapName}, configmap); err != nil {
+	if err := squidConfigsClient.Get(ctx, client.ObjectKey{Namespace: r.Namespace, Name: configMapName}, configmap); err != nil {
 		return admission.Warnings{"could not delete configs"}, err
 	}
 
@@ -116,12 +119,12 @@ func (r *SquidConfigs) validate(ctx context.Context) error {
 		return fmt.Errorf("missing annotation squid.ckd.clara.net/instance")
 	}
 
-	if err := r.client.Get(ctx, client.ObjectKey{Namespace: r.Namespace, Name: instanceName}, squidInstance); err != nil {
+	if err := squidConfigsClient.Get(ctx, client.ObjectKey{Namespace: r.Namespace, Name: instanceName}, squidInstance); err != nil {
 		return err
 	}
 
 	job = r.webhookJob(squidInstance.Spec.Image.Repository, squidInstance.Spec.Image.Tag)
-	if err := r.client.Create(ctx, job); err != nil {
+	if err := squidConfigsClient.Create(ctx, job); err != nil {
 		return err
 	}
 
@@ -168,7 +171,7 @@ func (r *SquidConfigs) waitForJobCompletion(ctx context.Context, jobName string)
 		time.Second*5,
 		true,
 		func(ctx context.Context) (bool, error) {
-			if err := r.client.Get(ctx, types.NamespacedName{
+			if err := squidConfigsClient.Get(ctx, types.NamespacedName{
 				Namespace: r.Namespace,
 				Name:      jobName,
 			}, &job); err != nil {

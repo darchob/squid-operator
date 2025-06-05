@@ -168,7 +168,6 @@ func (r *SquidInstanceReconciler) handlingUpdate(ctx context.Context, squidInsta
 
 	if err := r.Status().Update(ctx, squidInstance); err != nil {
 		if errors.IsConflict(err) {
-			// Conflit de mise à jour, on requeue
 			log.Info("Update conflict detected, requeing", "name", squidInstance.Name)
 			return ctrl.Result{Requeue: true}, nil
 		}
