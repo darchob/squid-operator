@@ -1,85 +1,55 @@
-# SquidConfig and SquidInstance Workflow
+# Workflow
 
-This document explains how SquidConfigs and SquidInstances interact within the Squid Operator.
+How `SquidInstance` and `SquidConfigs` interact, step by step.
 
-## Resource Interaction
-
-The Squid Operator manages two main custom resources:
-
-1. **SquidConfig**: Defines the configuration for Squid proxy instances
-2. **SquidInstance**: Manages the actual Squid proxy deployment
-
-## Workflow Diagram
+## Resource interaction
 
 ```mermaid
 flowchart TD
-    %% Styling
-    classDef success fill:#d4edda,stroke:#c3e6cb,color:#155724,stroke-width:2px,stroke-dasharray: 0
-    classDef warning fill:#fff3cd,stroke:#ffeeba,color:#856404,stroke-width:2px,stroke-dasharray: 0
-    classDef danger fill:#f8d7da,stroke:#f5c6cb,color:#721c24,stroke-width:2px,stroke-dasharray: 0
-    classDef info fill:#d1ecf1,stroke:#bee5eb,color:#0c5460,stroke-width:2px,stroke-dasharray: 0
-    classDef primary fill:#cce5ff,stroke:#b8daff,color:#004085,stroke-width:2px,stroke-dasharray: 0
+    classDef success fill:#d4edda,stroke:#c3e6cb,color:#155724,stroke-width:2px
+    classDef warning fill:#fff3cd,stroke:#ffeeba,color:#856404,stroke-width:2px
+    classDef danger fill:#f8d7da,stroke:#f5c6cb,color:#721c24,stroke-width:2px
+    classDef info fill:#d1ecf1,stroke:#bee5eb,color:#0c5460,stroke-width:2px
+    classDef primary fill:#cce5ff,stroke:#b8daff,color:#004085,stroke-width:2px
 
-    %% SquidInstance Flow
-    subgraph SquidInstance["SquidInstance Flow"]
+    subgraph Instance["SquidInstance"]
         direction TB
-        A([SquidInstance Created]):::primary -->|Create| B([Webhook Validation]):::info
-        B -->|Validate| C([Create ConfigMap]):::primary
-        C -->|Create| D([ConfigMap Ready]):::success
-        D -->|Deploy| E([Deploy Squid]):::primary
-        E -->|Monitor| F([Monitor Status]):::info
-        F -->|Update| G([Update Status]):::success
+        A([SquidInstance applied]):::primary --> B([Mutating webhook: image + storageClass defaults]):::info
+        B --> C([Add finalizer, requeue]):::info
+        C --> D([Create Deployment, ConfigMap, SA, Service, PVC]):::primary
+        D --> E([status.health = Done]):::success
     end
 
-    %% SquidConfig Flow
-    subgraph SquidConfig["SquidConfig Flow"]
+    subgraph Configs["SquidConfigs"]
         direction TB
-        H([SquidConfig Created]):::primary -->|Create| I([Webhook Validation]):::info
-        I -->|Validate| J([Create Validation Job]):::primary
-        J -->|Run| K([Validate Config]):::info
-        K -->|Update| L([Update ConfigMap Data]):::primary
-        L -->|Trigger| M([Trigger Reconciliation]):::info
-        M -->|Reload| N([Reload Squid]):::primary
-        N -->|Monitor| F
+        F([SquidConfigs applied]):::primary --> G([Validating webhook: Job runs squid -k parse]):::info
+        G -->|parse fails| H([Admission rejected]):::danger
+        G -->|parse ok| I([Add finalizer]):::info
+        I --> J([Merge rules into ConfigMap key name.conf]):::primary
+        J --> K([status.state = Merged]):::success
     end
 
-    %% Update Flow
-    O([SquidConfig Updated]):::warning -.->|Update| I
+    J --> L([ConfigMap watch enqueues the instance]):::info
+    L --> M([Deployment pod template annotated restartedAt]):::primary
+    M --> N([Rolling restart, Squid reloads]):::success
 
-    %% Delete Flow
-    subgraph Deletion["Deletion Flow"]
+    subgraph Deletion["SquidConfigs deletion"]
         direction TB
-        P([SquidConfig Deleted]):::danger -->|Validate| Q([Webhook Validation]):::info
-        Q -->|Check| R([Check Config Usage]):::info
-        R -->|Allow/Deny| S([Allow/Deny Deletion]):::danger
+        O([Delete requested]):::warning --> P([Controller removes the ConfigMap key, clears finalizer]):::primary
+        P --> Q([Validating webhook: key still present?]):::info
+        Q -->|yes| R([Deletion refused]):::danger
+        Q -->|no| S([Object removed]):::success
     end
-
-    %% Link styles
-    linkStyle default stroke:#666,stroke-width:2px
-    linkStyle 0,1,2,3,4,5,6,7,8,9,10,11,12,13,14 stroke:#666,stroke-width:2px
-    linkStyle 15 stroke:#666,stroke-width:2px,stroke-dasharray: 5 5
 ```
 
-## Detailed Workflow
-
-### 1. SquidInstance Creation
-
-When a SquidInstance is created:
-
-1. The webhook validates the instance configuration
-   - Checks image configuration
-   - Validates storage class
-   - Ensures resource requirements
-2. The operator creates a ConfigMap for the Squid configuration
-3. Creates the necessary Kubernetes resources
-4. Deploys the Squid proxy with the configuration
+## 1. SquidInstance creation
 
 ```yaml
-apiVersion: squid.claranet.fr/v1
+apiVersion: squid.cdk.clara.net/v1
 kind: SquidInstance
 metadata:
-  name: my-squid
-  namespace: squid-proxy
+  name: squid-sample
+  namespace: healthcare-tools
 spec:
   replicas: 1
   image:
@@ -88,112 +58,114 @@ spec:
   storageClassName: standard
 ```
 
-### 2. SquidConfig Creation/Update
+1. The API server validates the object against the CRD schema: `replicas`, `image` and
+   `storageClassName` are all required.
+2. The mutating webhook fills defaults for `storageClassName` (`standard`) when empty. The
+   validating webhook accepts everything.
+3. First reconcile: the controller appends `squid.ckd.clara.net/finalizer` and requeues — no child
+   resources are created in that pass.
+4. Second reconcile: for each of the five managed resources, `Get` by `{namespace, instance-name}`;
+   `NotFound` → `Create` with a controller reference and a `Normal`/`Created` event; otherwise
+   `Update` with a `Normal`/`Updated` event.
+5. `status.health` is set to `Done`, or `Error` if any resource failed. Conflicts on the status
+   update requeue instead of erroring.
 
-When a SquidConfig is created or updated:
+All five children share the instance's name and namespace. That naming is what ties the pieces
+together — the Deployment mounts the ConfigMap and PVC by that name, and the ConfigMap watch matches
+on it.
 
-1. The webhook performs validation:
-   - Creates a validation job
-   - Ensures required instance annotation
-   - Validates configuration syntax using squid -k parse
-   - Timeout of 2 minutes for validation
-2. The operator updates the data in the existing ConfigMap
-3. Triggers reconciliation of the affected SquidInstance
-4. Reloads the Squid configuration in the running pods
+## 2. SquidConfigs creation or update
 
 ```yaml
-apiVersion: squid.claranet.fr/v1
-kind: SquidConfig
+apiVersion: squid.cdk.clara.net/v1
+kind: SquidConfigs
 metadata:
-  name: my-squid-config
-  namespace: squid-proxy
+  name: allow-localnet
+  namespace: healthcare-tools
   annotations:
-    squid.ckd.clara.net/instance: my-squid
+    squid.ckd.clara.net/instance: squid-sample
 spec:
-  config: |
-    http_port 3128
-    acl SSL_ports port 443
-    acl Safe_ports port 80
+  rules: |
+    acl localnet src 10.0.0.0/8
+    http_access allow localnet
 ```
 
-### 3. SquidConfig Deletion
+1. **Admission** — the validating webhook:
+    - requires the `squid.ckd.clara.net/instance` annotation
+      (`missing annotation squid.ckd.clara.net/instance` otherwise);
+    - reads the target `SquidInstance` to learn which image to validate against;
+    - creates `validate-allow-localnet-<suffix>`, a `Job` that writes the rules to
+      `/etc/squid/conf.d/00-squid.conf` and runs `squid -k parse`;
+    - polls every 5s, up to 2 minutes; `Failed > 0` → `validation job failed` and the request is
+      rejected.
+2. **Reconcile** — first pass adds the finalizer. Then the controller reads the ConfigMap named by
+   the annotation and merges `spec.rules` into `allow-localnet.conf`.
+3. **Rollout** — the ConfigMap update wakes the instance controller through its ConfigMap watch, the
+   Deployment pod template gets a fresh `squid-operator.kubernetes.io/restartedAt` timestamp, and
+   the pods roll.
+4. `status.state` becomes `Merged`.
 
-When a SquidConfig is deleted:
+Submitting the exact same rules again yields the internal duplicate error rather than a rewrite, so
+no pointless rollout happens.
 
-1. The webhook performs pre-deletion validation:
-   - Checks if configuration is still in use
-   - Verifies configmap references
-   - Prevents deletion if configuration is active
-2. If validation passes, the resource is deleted
-3. The operator updates the affected SquidInstance
+!!! warning
+    The webhook fetches the target instance but the **controller** only fetches the ConfigMap. If the
+    annotation names something that exists as a ConfigMap but not as a `SquidInstance`, admission
+    fails; if the instance exists but its ConfigMap has not been created yet, the reconcile errors
+    and retries. Create the instance first, then its fragments.
 
-### 4. Configuration Updates
+## 3. SquidConfigs deletion
 
-When a SquidConfig is updated:
+1. `kubectl delete` sets `deletionTimestamp` — the finalizer keeps the object alive.
+2. The controller reconciles with `truncate = true`: the key `<name>.conf` is deleted from the
+   ConfigMap, `status.state` becomes `Deletion` and the finalizer list is cleared.
+3. The validating delete webhook re-reads the ConfigMap. If `<name>.conf` is still there, deletion is
+   refused with `configmap <cm> still contains the following rules <key>`; otherwise the object is
+   removed.
+4. The ConfigMap change triggers a rollout, so the proxy drops the rules.
 
-```go
-func (r *SquidInstanceReconciler) handleConfigUpdate(ctx context.Context, instance *v1.SquidInstance) error {
-    // Get the ConfigMap
-    configMap := &corev1.ConfigMap{}
-    if err := r.Get(ctx, types.NamespacedName{
-        Name:      instance.Spec.ConfigMapName,
-        Namespace: instance.Namespace,
-    }, configMap); err != nil {
-        return err
-    }
+## 4. SquidInstance deletion
 
-    // Update Squid configuration
-    if err := r.updateSquidConfig(ctx, instance, configMap); err != nil {
-        return err
-    }
+1. `deletionTimestamp` is set; the finalizer holds the object.
+2. The controller deletes each of the five managed resources that still exist (`NotFound` is
+   skipped), then removes the finalizer.
+3. Deleting the ConfigMap discards every merged fragment. The `SquidConfigs` objects themselves are
+   **not** deleted — they have no owner reference to the instance — and will error on their next
+   reconcile until the instance (and its ConfigMap) exists again, or they are deleted.
 
-    return nil
-}
-```
+## Status reference
 
-### 5. Status Management
+`SquidInstance`:
 
-The operator maintains status information for both resources:
+| Field                  | Values                                                                    |
+| ---------------------- | ------------------------------------------------------------------------- |
+| `status.health`        | `Done`, `Error` (the API also defines `Pending`, `Deployed`, `Merged`, currently unused) |
+| `status.loadBalancer`  | Copied from the `Service` once the load balancer reports ingress          |
 
-```go
-type SquidConfigStatus struct {
-    Conditions []metav1.Condition `json:"conditions,omitempty"`
-    Phase      ConfigPhase       `json:"phase,omitempty"`
-}
+`SquidConfigs`:
 
-type SquidInstanceStatus struct {
-    Conditions []metav1.Condition `json:"conditions,omitempty"`
-    Health     StatusPhase        `json:"health,omitempty"`
-}
-```
+| Field          | Values                                          |
+| -------------- | ----------------------------------------------- |
+| `status.state` | `Merged`, `Applying`, `Deletion`, `Failed`      |
 
-## Best Practices
+Neither kind uses `metav1.Condition`; there is no `Ready` condition to wait on. Use the printer
+columns (`kubectl get squidinstance`, `kubectl get squidconfigs`) and the emitted events.
 
-1. **Configuration Management**
-   - Use separate SquidConfigs for different environments
-   - Version control your configurations
-   - Test configurations before applying
-   - Always include the required instance annotation
+## Best practices
 
-2. **Instance Management**
-   - Create instances in the same namespace as their configs
-   - Monitor instance health
-   - Use appropriate resource limits
-   - Ensure storage class is properly configured
+1. **Ordering** — create the `SquidInstance` before any `SquidConfigs` targeting it, and keep them in
+   the same namespace.
+2. **One concern per fragment** — one `SquidConfigs` per rule set, named for what it does; the name
+   becomes the ConfigMap key and shows up in `squid -k parse` errors.
+3. **Deletion** — delete fragments before their instance, so the merge/unmerge path can run while the
+   ConfigMap still exists.
+4. **Admission budget** — the 2-minute validation window includes pulling the Squid image. Pre-pull
+   it or use a local registry mirror on busy clusters.
+5. **Validation Jobs** — expect one `Job` per create/update. Configure a `ttlSecondsAfterFinished`
+   default or prune them periodically.
 
-3. **Updates**
-   - Plan configuration changes
-   - Test updates in staging
-   - Monitor for issues
-   - Be aware of the 2-minute validation timeout
+## Next steps
 
-4. **Deletion**
-   - Check for active usage before deleting configurations
-   - Ensure proper cleanup of related resources
-   - Monitor for any orphaned resources
-
-## Next Steps
-
-- [API Reference](../reference/api.md) - Detailed API documentation
-- [Configuration](../user-guide/configuration.md) - Configuration options
-- [Monitoring](../user-guide/monitoring.md) - Monitoring setup
+- [Components](components.md) — the code behind each step
+- [Configuration](../user-guide/configuration.md) — writing rules
+- [Monitoring](../user-guide/monitoring.md) — watching status and events

@@ -1,244 +1,156 @@
 # Networking
 
-This document describes the networking architecture and configuration of the Squid Operator.
+Every port, Service and network policy the operator actually creates or ships.
 
-## Network Architecture
+## Squid instance traffic
 
-### Overview
+### Service
 
-The Squid Operator implements a proxy architecture with the following components:
-
-1. **Client Network**
-   - Client applications
-   - Network policies
-   - Service endpoints
-
-2. **Proxy Network**
-   - Squid proxy instances
-   - Load balancing
-   - Service configuration
-
-3. **Upstream Network**
-   - External services
-   - DNS resolution
-   - Connection handling
-
-## Network Components
-
-### Services
-
-The operator creates Kubernetes services for Squid instances:
+One `Service` per `SquidInstance`, named after it, built by `pkg/squid/networking.go`:
 
 ```yaml
 apiVersion: v1
 kind: Service
 metadata:
-  name: squid-service
-  namespace: squid-proxy
+  name: squid-sample
+  namespace: healthcare-tools
 spec:
-  type: ClusterIP
+  type: LoadBalancer
   ports:
-  - port: 3128
-    targetPort: 3128
-    protocol: TCP
+    - name: http
+      protocol: TCP
+      port: 3128
+      targetPort: 3128
   selector:
-    app: squid
+    app.kubernetes.io/name: squid-sample
 ```
 
-Service Types:
-- ClusterIP (default)
-- NodePort
-- LoadBalancer
+- The type is **always `LoadBalancer`** — not configurable. On a cluster without a load-balancer
+  controller the `EXTERNAL-IP` stays `<pending>`; the `NodePort` and `ClusterIP` still work.
+- Port `3128` only. Squid's own `http_port` directive lives in your `SquidConfigs` rules; changing it
+  there without changing the container port breaks the probes.
+- Once the load balancer reports ingress, the controller copies it into
+  `status.loadBalancer` on the instance.
 
-### Network Policies
+There is **no Ingress** support: no Ingress object is created and the `SquidInstance` spec has no
+ingress field. HTTP proxying is L4 traffic to `3128`; an HTTP Ingress is the wrong shape for it
+anyway. Expose it through the `LoadBalancer` Service, or add a `Service` of your own.
 
-Network policies control traffic flow:
+### Pod ports and probes
+
+The container declares one port and both probes target it:
+
+```yaml
+ports:
+  - name: http
+    containerPort: 3128
+    protocol: TCP
+livenessProbe:
+  tcpSocket: { port: http }
+readinessProbe:
+  tcpSocket: { port: http }
+```
+
+TCP-only probes: a Squid that accepts connections but denies every request still reads as healthy.
+
+### Restricting who can use the proxy
+
+Two independent layers:
+
+- **Squid ACLs**, in `SquidConfigs` rules — the real access control, see
+  [Configuration](../user-guide/configuration.md).
+- **NetworkPolicy**, written by you. The operator ships no policy for instance pods. Select them
+  through the labels it applies:
 
 ```yaml
 apiVersion: networking.k8s.io/v1
 kind: NetworkPolicy
 metadata:
-  name: squid-network-policy
-  namespace: squid-proxy
+  name: squid-sample-clients
+  namespace: healthcare-tools
 spec:
   podSelector:
     matchLabels:
-      app: squid
-  policyTypes:
-  - Ingress
-  - Egress
+      app.kubernetes.io/name: squid-sample
+      app.kubernetes.io/managed-by: squid-operator
+  policyTypes: [Ingress]
   ingress:
-  - from:
-    - podSelector:
-        matchLabels:
-          app: allowed-client
-    ports:
-    - protocol: TCP
-      port: 3128
+    - from:
+        - podSelector:
+            matchLabels:
+              proxy-client: "true"
+      ports:
+        - protocol: TCP
+          port: 3128
 ```
 
-## Proxy Configuration
+Remember the egress side: a forward proxy needs to reach the internet, and DNS. A default-deny
+egress policy in the namespace will silently break it.
 
-### Port Configuration
+## Operator traffic
 
-Default ports:
-- HTTP Proxy: 3128
-- HTTPS Proxy: 3128
-- Monitoring: 3129
+| Port   | Served by                     | Configured with                                            |
+| ------ | ----------------------------- | ---------------------------------------------------------- |
+| `9443` | Admission webhook server      | controller-runtime default; certs at `/tmp/k8s-webhook-server/serving-certs` |
+| `8081` | `healthz` / `readyz`          | `--health-probe-bind-address` (default `:8081`)            |
+| `8080` | Prometheus metrics (plain)    | `--metrics-bind-address` (default `:8080`; `0` disables)   |
+| `8443` | Prometheus metrics (TLS)      | `--metrics-bind-address=:8443 --metrics-secure`             |
 
-### Protocol Support
+The Helm chart starts the manager with `--metrics-bind-address=0`, so metrics are off unless you
+change it. The `Service` in front of the webhook is `<release>-webhook-service:443 → 9443`.
 
-Supported protocols:
-- HTTP
-- HTTPS
-- FTP
-- SSL/TLS
+HTTP/2 is disabled on both the metrics and webhook servers unless `--enable-http2` is passed, to
+avoid the Stream Cancellation / Rapid Reset CVEs (GHSA-qppj-fm5r-hxr3, GHSA-4374-p667-p6c8).
 
-## DNS Configuration
+### Webhook certificates
 
-### DNS Resolution
+cert-manager issues the serving certificate (`config/certmanager/`, or `templates/certificats.yaml`
+in the chart) and injects the CA bundle into both webhook configurations through the
+`cert-manager.io/inject-ca-from` annotation. Both configurations use `failurePolicy: Fail`: if the
+webhook is unreachable, creating or updating `SquidInstance` / `SquidConfigs` objects fails closed.
 
-Squid DNS configuration:
+### Shipped network policies
+
+`config/network-policy/` (applied only if you include that kustomize component) restricts ingress to
+the manager pod:
+
+- `allow-metrics-traffic` — port `8443` from namespaces labelled `metrics: enabled`
+- `allow-webhook-traffic` — port `443` from namespaces labelled `webhook: enabled`
+
+The second one matters: with that policy active, `SquidInstance`/`SquidConfigs` objects can only be
+created from namespaces carrying `webhook: enabled`, because the API server call to the webhook is
+blocked otherwise.
+
+## Validation Jobs
+
+The `SquidConfigs` webhook runs `squid -k parse` in a Job in the **resource's own namespace**, using
+the instance's image. Its pod needs to pull that image, so it is subject to the namespace's egress
+policies and to any `imagePullSecrets` requirements. A blocked or slow pull shows up as a 2-minute
+admission timeout.
+
+## DNS
+
+The operator sets no DNS configuration on the pods; they use the cluster resolver. Squid's own
+resolution behaviour is configured through rules, for example:
 
 ```yaml
-apiVersion: squid.claranet.fr/v1
-kind: SquidConfig
-metadata:
-  name: dns-config
 spec:
-  config: |
-    dns_nameservers 8.8.8.8 8.8.4.4
+  rules: |
+    dns_nameservers 10.96.0.10
     dns_v4_first on
-    dns_defnames on
-```
-
-### DNS Cache
-
-DNS caching configuration:
-
-```yaml
-apiVersion: squid.claranet.fr/v1
-kind: SquidConfig
-metadata:
-  name: dns-cache-config
-spec:
-  config: |
-    dns_cache_size 1024
-    dns_cache_ttl 3600
-    dns_cache_garbage_interval 3600
-```
-
-## Security
-
-### TLS Configuration
-
-TLS settings for secure communication:
-
-```yaml
-apiVersion: squid.claranet.fr/v1
-kind: SquidConfig
-metadata:
-  name: tls-config
-spec:
-  config: |
-    https_port 3128 cert=/etc/squid/ssl/cert.pem key=/etc/squid/ssl/key.pem
-    ssl_bump server-first all
-    sslproxy_cert_error allow all
-```
-
-### Authentication
-
-Authentication configuration:
-
-```yaml
-apiVersion: squid.claranet.fr/v1
-kind: SquidConfig
-metadata:
-  name: auth-config
-spec:
-  config: |
-    auth_param basic program /usr/lib/squid/basic_ncsa_auth /etc/squid/passwd
-    auth_param basic realm Squid proxy-caching web server
-    auth_param basic credentialsttl 2 hours
-    acl authenticated proxy_auth REQUIRED
-    http_access allow authenticated
-```
-
-## Performance
-
-### Connection Handling
-
-Connection management settings:
-
-```yaml
-apiVersion: squid.claranet.fr/v1
-kind: SquidConfig
-metadata:
-  name: connection-config
-spec:
-  config: |
-    client_persistent_connections on
-    server_persistent_connections on
-    pconn_timeout 1 minute
-    read_timeout 15 minutes
-    request_timeout 5 minutes
-```
-
-### Load Balancing
-
-Load balancing configuration:
-
-```yaml
-apiVersion: squid.claranet.fr/v1
-kind: SquidInstance
-metadata:
-  name: load-balanced-instance
-spec:
-  replicas: 3
-  serviceType: LoadBalancer
-  servicePort: 3128
-```
-
-## Monitoring
-
-### Network Metrics
-
-Network-related metrics:
-
-```yaml
-apiVersion: squid.claranet.fr/v1
-kind: SquidConfig
-metadata:
-  name: metrics-config
-spec:
-  config: |
-    logformat metrics %ts.%03tu %6tr %>a %Ss/%03>Hs %<st %rm %ru %un %Sh/%<A %mt
-    access_log /var/log/squid/metrics.log metrics
 ```
 
 ## Troubleshooting
 
-### Network Issues
+| Symptom                              | Check                                                                   |
+| ------------------------------------ | ----------------------------------------------------------------------- |
+| `EXTERNAL-IP` stuck `<pending>`      | Cluster has no load-balancer controller; use the `NodePort` or `ClusterIP` |
+| Proxy reachable but everything denied | Squid ACLs in your `SquidConfigs`, not the network layer                 |
+| `context deadline exceeded` on apply | Webhook unreachable — netpol, webhook Service, cert-manager             |
+| Endpoints empty                      | Pods not ready — TCP probe on `3128` failing, check pod logs            |
 
-Common network issues and solutions:
+## Next steps
 
-1. **Connection Timeouts**
-   - Check network policies
-   - Verify service configuration
-   - Check DNS resolution
-
-2. **Performance Issues**
-   - Monitor connection counts
-   - Check load balancing
-   - Verify resource limits
-
-3. **Authentication Failures**
-   - Check authentication configuration
-   - Verify credentials
-   - Check network access
-
-## Next Steps
-
-- [Components](../architecture/components.md) - Component architecture
-- [Monitoring](../architecture/monitoring.md) - Monitoring setup
-- [Security](../development/security.md) - Security considerations
+- [Components](components.md) — where each object is built
+- [Monitoring](../user-guide/monitoring.md) — scraping the manager metrics
+- [Security](../development/security.md) — RBAC and hardening

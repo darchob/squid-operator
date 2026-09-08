@@ -1,181 +1,185 @@
-# Basic Usage Guide
+# Basic Usage
 
-This guide covers the basic usage scenarios for the Squid Operator.
+Everyday operations against the two custom resources. See [Quick Start](../getting-started/quickstart.md)
+for the first deployment.
 
-## Basic Configuration
+## Create a proxy
 
-### Creating a Simple Squid Proxy
-
-1. Create a basic SquidConfig:
-
-```yaml
-apiVersion: squid.claranet.fr/v1
-kind: SquidConfig
-metadata:
-  name: basic-squid-config
-  namespace: squid-proxy
-spec:
-  config: |
-    http_port 3128
-    acl SSL_ports port 443
-    acl Safe_ports port 80
-    acl Safe_ports port 443
-    http_access allow localhost
-    http_access deny all
-```
-
-2. Create a basic SquidInstance:
-
-```yaml
-apiVersion: squid.claranet.fr/v1
+```yaml title="instance.yaml"
+apiVersion: squid.cdk.clara.net/v1
 kind: SquidInstance
 metadata:
-  name: basic-squid
-  namespace: squid-proxy
+  name: squid-sample
+  namespace: healthcare-tools
 spec:
-  replicas: 1
+  replicas: 2
   image:
-    repository: squid
+    repository: ubuntu/squid
     tag: latest
-  resources:
-    requests:
-      cpu: 100m
-      memory: 128Mi
-    limits:
-      cpu: 500m
-      memory: 512Mi
+  storageClassName: standard   # must support ReadWriteMany
 ```
-
-## Common Use Cases
-
-### Basic Proxy Setup
-
-1. Deploy the configuration:
 
 ```bash
-kubectl apply -f basic-squid-config.yaml
-kubectl apply -f basic-squid-instance.yaml
+kubectl apply -f instance.yaml
+kubectl get squidinstance -n healthcare-tools
 ```
 
-2. Verify the deployment:
+```
+NAME           HEALTH
+squid-sample   Done
+```
+
+`spec.replicas`, `spec.image` and `spec.storageClassName` are all required by the CRD. There is no
+field for resources, ports, service type or Ingress — see [Configuration](configuration.md#what-is-not-configurable).
+
+## Add configuration
+
+Rules live in `SquidConfigs` objects, each targeting an instance through an annotation:
+
+```yaml title="acl.yaml"
+apiVersion: squid.cdk.clara.net/v1
+kind: SquidConfigs
+metadata:
+  name: allow-localnet
+  namespace: healthcare-tools
+  annotations:
+    squid.ckd.clara.net/instance: squid-sample
+spec:
+  rules: |
+    acl localnet src 10.0.0.0/8
+    http_access allow localnet
+```
 
 ```bash
-kubectl get pods -n squid-proxy
-kubectl get svc -n squid-proxy
+kubectl apply -f acl.yaml
+kubectl get squidconfigs -n healthcare-tools
 ```
 
-### Scaling the Proxy
-
-To scale the number of Squid proxy instances:
-
-```yaml
-apiVersion: squid.claranet.fr/v1
-kind: SquidInstance
-metadata:
-  name: basic-squid
-  namespace: squid-proxy
-spec:
-  replicas: 3  # Increase the number of replicas
-  # ... rest of the configuration
+```
+NAME             STATE
+allow-localnet   Merged
 ```
 
-### Resource Management
+Apply as many as you need — each one owns the ConfigMap key `<its-name>.conf`:
 
-Adjust resource limits and requests:
-
-```yaml
-apiVersion: squid.claranet.fr/v1
-kind: SquidInstance
-metadata:
-  name: basic-squid
-  namespace: squid-proxy
-spec:
-  # ... other configuration
-  resources:
-    requests:
-      cpu: 200m
-      memory: 256Mi
-    limits:
-      cpu: 1000m
-      memory: 1Gi
+```bash
+kubectl get cm squid-sample -n healthcare-tools -o jsonpath='{.data}' | jq keys
 ```
 
-## Service Configuration
-
-### Service Types
-
-Configure different service types:
-
-```yaml
-apiVersion: squid.claranet.fr/v1
-kind: SquidInstance
-metadata:
-  name: basic-squid
-  namespace: squid-proxy
-spec:
-  # ... other configuration
-  serviceType: LoadBalancer  # Options: ClusterIP, NodePort, LoadBalancer
-  servicePort: 3128
+```json
+["allow-localnet.conf", "cache-tuning.conf", "squid-init.conf"]
 ```
 
-## Monitoring and Logging
+`squid-init.conf` is seeded by the operator when it creates the ConfigMap and is not owned by any
+`SquidConfigs`.
 
-### Basic Monitoring
+## Inspect what is deployed
 
-Enable basic monitoring:
+Everything the instance owns shares its name:
 
-```yaml
-apiVersion: squid.claranet.fr/v1
-kind: SquidInstance
-metadata:
-  name: basic-squid
-  namespace: squid-proxy
-spec:
-  # ... other configuration
-  monitoring:
-    enabled: true
-    port: 3129
+```bash
+kubectl get deploy,svc,cm,pvc,sa -n healthcare-tools -l app.kubernetes.io/name=squid-sample
 ```
 
-### Logging Configuration
-
-Configure basic logging:
-
-```yaml
-apiVersion: squid.claranet.fr/v1
-kind: SquidConfig
-metadata:
-  name: basic-squid-config
-  namespace: squid-proxy
-spec:
-  config: |
-    # ... other configuration
-    access_log /var/log/squid/access.log
-    cache_log /var/log/squid/cache.log
-    logformat squid %ts.%03tu %6tr %>a %Ss/%03>Hs %<st %rm %ru %un %Sh/%<A %mt
+```bash
+kubectl describe squidinstance squid-sample -n healthcare-tools     # events: Created / Updated
+kubectl get events -n healthcare-tools --sort-by='.lastTimestamp'
 ```
 
-## Troubleshooting
+The rendered configuration, as Squid sees it:
 
-### Common Issues
+```bash
+kubectl exec -n healthcare-tools deploy/squid-sample -- ls /etc/squid/conf.d/
+kubectl exec -n healthcare-tools deploy/squid-sample -- cat /etc/squid/conf.d/allow-localnet.conf
+```
 
-1. **Pod Not Starting**
-   - Check resource limits
-   - Verify configuration syntax
-   - Check logs: `kubectl logs -n squid-proxy <pod-name>`
+## Change configuration
 
-2. **Service Not Accessible**
-   - Verify service type
-   - Check network policies
-   - Test connectivity: `kubectl exec -it <pod-name> -n squid-proxy -- curl localhost:3128`
+Edit the `SquidConfigs` and re-apply:
 
-3. **Configuration Issues**
-   - Validate SquidConfig syntax
-   - Check for missing required fields
-   - Verify namespace permissions
+```bash
+kubectl apply -f acl.yaml
+```
 
-## Next Steps
+The webhook re-validates with `squid -k parse` before anything is written, the controller rewrites
+the ConfigMap key, and the instance controller stamps
+`squid-operator.kubernetes.io/restartedAt` on the Deployment pod template, rolling the pods.
 
-- [Advanced Configuration](../user-guide/configuration.md) - Learn about advanced configuration options
-- [Security Guide](../development/security.md) - Security best practices
-- [API Reference](../reference/api.md) - Detailed API documentation
+```bash
+kubectl rollout status deploy/squid-sample -n healthcare-tools
+```
+
+Re-applying byte-identical rules is detected as a duplicate and does not trigger a rollout.
+
+## Scale
+
+```bash
+kubectl patch squidinstance squid-sample -n healthcare-tools \
+  --type=merge -p '{"spec":{"replicas":3}}'
+```
+
+`kubectl scale` does not work — the CRD has no `scale` subresource. `spec.hpaSpec` exists in the API
+but is not reconciled. See [Scaling](scaling.md).
+
+## Use the proxy
+
+```bash
+kubectl get svc squid-sample -n healthcare-tools
+```
+
+In-cluster clients:
+
+```bash
+export http_proxy=http://squid-sample.healthcare-tools.svc.cluster.local:3128
+export https_proxy=$http_proxy
+```
+
+Quick check:
+
+```bash
+kubectl run curl --rm -it --image=curlimages/curl --restart=Never -- \
+  curl -sS -x http://squid-sample.healthcare-tools.svc.cluster.local:3128 -I https://example.com
+```
+
+A `403 Forbidden` from Squid means it is running and your ACLs denied the request — a configuration
+result, not a failure of the operator.
+
+## Read logs
+
+Squid logs go to the PVC mounted at `/var/log/squid`, not to stdout:
+
+```bash
+kubectl exec -n healthcare-tools deploy/squid-sample -- tail -f /var/log/squid/access.log
+kubectl exec -n healthcare-tools deploy/squid-sample -- tail -f /var/log/squid/cache.log
+```
+
+`kubectl logs` shows only what the image writes to stdout. The PVC is `ReadWriteMany` and shared by
+all replicas — plan for log rotation (`logfile_rotate` in your rules) so `10Gi` is not filled up.
+
+## Remove things
+
+```bash
+kubectl delete squidconfigs allow-localnet -n healthcare-tools   # removes its ConfigMap key, rolls pods
+kubectl delete squidinstance squid-sample -n healthcare-tools    # removes all five owned resources
+```
+
+Delete fragments **before** their instance: the delete webhook reads the instance ConfigMap, and
+without it deletion is refused and the finalizer has to be cleared by hand.
+
+## Common issues
+
+| Symptom                                                   | Cause                                                                 |
+| --------------------------------------------------------- | --------------------------------------------------------------------- |
+| `missing annotation squid.ckd.clara.net/instance`         | `SquidConfigs` has no target annotation (note the `ckd` spelling)     |
+| `validation job failed`                                   | `squid -k parse` rejected the rules — see the Job's pod logs          |
+| Apply hangs, then `context deadline exceeded`             | Validation Job could not run within 2 minutes (image pull, quota, RBAC) |
+| `HEALTH: Error` on the instance                           | A managed resource failed; check the manager logs                    |
+| Pod `Pending`                                             | PVC unbound — the storage class does not support `ReadWriteMany`      |
+
+More in [Troubleshooting](troubleshooting.md).
+
+## Next steps
+
+- [Configuration](configuration.md) — what to write in `spec.rules`
+- [Monitoring](monitoring.md) — status, events, metrics
+- [API Reference](../reference/api.md) — every field

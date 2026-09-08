@@ -1,212 +1,148 @@
 # Components
 
-This document describes the main components of the Squid Operator and their interactions.
+Code-level map of the operator. Paths are relative to the repository root.
 
-## Operator Components
+## Manager — `cmd/main.go`
 
-### Controller
+Builds the controller-runtime manager and registers everything:
 
-The controller is the main component that manages the lifecycle of Squid resources.
+- Both reconcilers, each with its own `EventRecorder` (`squidInstances`, `squidConfigs`)
+- Both webhook pairs, from `api/v1`, unless `ENABLE_WEBHOOKS=false`
+- `healthz` / `readyz` probes on `--health-probe-bind-address` (default `:8081`)
+- Metrics on `--metrics-bind-address` (default `:8080`), optionally TLS with `--metrics-secure`
+- Leader election under `--leader-elect`, lease ID `aa7cb171.cdk.clara.net`
+- HTTP/2 disabled unless `--enable-http2` (mitigates the Rapid Reset CVEs)
 
-```go
-type Controller struct {
-    client.Client
-    Scheme *runtime.Scheme
-    Log    logr.Logger
-}
-```
+## Controllers — `internal/controller/`
 
-Responsibilities:
-- Watching for changes to SquidConfig and SquidInstance resources
-- Reconciling desired state with actual state
-- Managing the lifecycle of Squid proxy instances
-- Handling configuration updates
+### SquidInstanceReconciler
 
-### Reconciler
-
-The reconciler handles the reconciliation logic for each resource type.
+`squidinstance_controller.go`.
 
 ```go
 type SquidInstanceReconciler struct {
-    client.Client
-    Scheme *runtime.Scheme
-    Log    logr.Logger
+	client.Client
+	Scheme   *runtime.Scheme
+	Recorder record.EventRecorder
 }
 ```
 
-Responsibilities:
-- Creating and updating Kubernetes resources
-- Managing configuration updates
-- Handling scaling operations
-- Monitoring resource status
+Dispatches on object state: no finalizer → `handlingInit`, `DeletionTimestamp != nil` →
+`handlingDeletion`, otherwise `handlingReconciliation`.
 
-## Managed Resources
-
-### SquidConfig
-
-The SquidConfig resource defines the configuration for Squid proxy instances.
-
-```yaml
-apiVersion: squid.claranet.fr/v1
-kind: SquidConfig
-metadata:
-  name: example-config
-spec:
-  config: |
-    http_port 3128
-    acl SSL_ports port 443
-    acl Safe_ports port 80
-    acl Safe_ports port 443
-    http_access allow localhost
-    http_access deny all
-```
-
-Components:
-- Configuration template
-- Validation rules
-- Default values
-
-### SquidInstance
-
-The SquidInstance resource manages the deployment of Squid proxy instances.
-
-```yaml
-apiVersion: squid.claranet.fr/v1
-kind: SquidInstance
-metadata:
-  name: example-instance
-spec:
-  replicas: 1
-  image:
-    repository: squid
-    tag: latest
-  resources:
-    requests:
-      cpu: 100m
-      memory: 128Mi
-    limits:
-      cpu: 500m
-      memory: 512Mi
-```
-
-Components:
-- Deployment specification
-- Service configuration
-- Resource requirements
-- Monitoring setup
-
-## Supporting Components
-
-### Metrics
-
-Metrics collection for monitoring Squid instances.
+The set of resources it manages is a package-level table pairing an empty object with its builder:
 
 ```go
-type MetricsCollector struct {
-    client.Client
-    Log logr.Logger
+var managedResources = []ManagedResource{
+	{Type: &appsv1.Deployment{},             Generate: func(si *squidv1.SquidInstance) client.Object { return squid.NewDeployment(si) }},
+	{Type: &corev1.ConfigMap{},              Generate: /* squid.ConfigMap */},
+	{Type: &corev1.ServiceAccount{},         Generate: /* squid.NewServiceAccount */},
+	{Type: &corev1.Service{},                Generate: /* squid.Service */},
+	{Type: &corev1.PersistentVolumeClaim{},  Generate: /* squid.PersistentVolumeClaim */},
 }
 ```
 
-Metrics:
-- Request count
-- Cache hit ratio
-- Response times
-- Resource usage
+Adding a managed resource means adding a builder in `pkg/squid/` and one entry here.
 
-### Webhooks
+Watches: `Owns` Deployment, ServiceAccount, ConfigMap, PVC, plus an explicit `Watches` on ConfigMaps
+that maps a ConfigMap back to the SquidInstance of the same name.
 
-Validation and mutation webhooks for custom resources.
+### SquidConfigsReconciler
 
-```go
-type ValidatingWebhook struct {
-    client.Client
-    Log logr.Logger
-}
-```
+`squidconfigs_controller.go`.
 
-Webhooks:
-- Validation webhook for SquidConfig
-  - Validates configuration syntax using a validation job
-  - Checks for required instance annotation
-  - Ensures configuration is valid before creation/update
-  - Prevents deletion if config is still in use
-- Validation webhook for SquidInstance
-  - Validates image configuration
-  - Ensures storage class is specified
-  - Validates resource requirements
-- Defaulting webhook for resources
-  - Sets default image (ubuntu/squid)
-  - Sets default tag
-  - Sets default storage class (standard)
+Adds the finalizer on first sight, then merges. States are an internal enum surfaced as
+`status.state`: `Merged`, `Deletion`, `Applying`, `Failed`.
 
-### SquidConfig Validation
+### Shared helpers — `squid_common.go`
 
-The SquidConfig webhook performs the following validations:
+- `finalizerName = "squid.ckd.clara.net/finalizer"`
+- `handleConfigMap(obj, configs, truncate)` — the merge itself: computes the key
+  `<configs.Name>.conf`, deletes it when `truncate` is set (deletion path), otherwise writes
+  `spec.rules`; returns a duplicate error if the stored content is already identical.
 
-1. **Pre-Creation/Update Validation**
-   - Creates a validation job to test configuration
-   - Ensures required instance annotation is present
-   - Validates configuration syntax using squid -k parse
-   - Timeout of 2 minutes for validation
+## Resource builders — `pkg/squid/`
 
-2. **Pre-Deletion Validation**
-   - Checks if configuration is still in use
-   - Verifies configmap references
-   - Prevents deletion if configuration is active
+Pure functions: given a `*SquidInstance`, return the desired Kubernetes object. No client, no
+context — this is the layer to change what gets deployed.
 
-Example validation error:
+| File            | Provides                                                                                       |
+| --------------- | ---------------------------------------------------------------------------------------------- |
+| `defaults.go`   | `Labels`, `Annotations`, `ObjectMeta` — common metadata and owner reference for every child     |
+| `workloads.go`  | `NewDeployment` — container `<instance-name>`, image `repository:tag`, `imagePullPolicy: Always`, port `3128` (`http`), TCP liveness + readiness on that port, volumes `configs` (ConfigMap → `/etc/squid/conf.d/`) and `logs` (PVC → `/var/log/squid`) |
+| `networking.go` | `Service` — type `LoadBalancer`, port `3128`, selector `app.kubernetes.io/name: <instance-name>` |
+| `storages.go`   | `ConfigMap` — seeded with `squid-init.conf`; `PersistentVolumeClaim` — `ReadWriteMany`, `10Gi`   |
+| `sa.go`         | `NewServiceAccount`                                                                             |
+| `errors.go`     | `IsRulesExistError`                                                                             |
+
+Labels applied to every child object:
+
 ```yaml
-status:
-  conditions:
-  - type: Valid
-    status: "False"
-    reason: ValidationFailed
-    message: "Configuration validation failed: squid -k parse returned error"
+app.kubernetes.io/name: <instance-name>
+app.kubernetes.io/version: <image-tag>       # SquidInstance only
+app.kubernetes.io/part-of: squid-<instance-name>
+app.kubernetes.io/managed-by: squid-operator
 ```
 
-## Component Interactions
+No pod resource requests or limits are set — the pods land in the namespace's default
+`LimitRange`/`ResourceQuota`, or unbounded if none exists.
 
-### Resource Lifecycle
+## Webhooks — `api/v1/`
 
-1. User creates SquidConfig
-2. Controller watches for changes
-3. Reconciler processes the configuration
-4. SquidInstance is created or updated
-5. Status is updated
+Registered by `cmd/main.go` through `SetupWebhookWithManager`, using the legacy
+`webhook.Defaulter` / `webhook.Validator` interfaces.
 
-### Configuration Flow
+### SquidInstance — `squidinstance_webhook.go`
 
-1. SquidConfig is created
-2. Configuration is validated
-3. ConfigMap is created
-4. SquidInstance is updated
-5. Pods are restarted if needed
+- **Mutating** (`/mutate-squid-cdk-clara-net-v1-squidinstance`): sets
+  `DefaultImage = "ubuntu/squid"`, `DefaultTag = "latest"`, `DefaultStorageClass = "standard"`.
+- **Validating** (`/validate-squid-cdk-clara-net-v1-squidinstance`): logs only, returns no error.
 
-### Monitoring Flow
+!!! warning
+    The image default guards on `r.Spec.Image == nil` and then writes through that same nil pointer.
+    The CRD marks `image` required, so the API server rejects the object before the webhook is
+    reached and the path is unreachable in practice — but it is a latent nil dereference. Always set
+    `spec.image` explicitly.
 
-1. Metrics are collected
-2. Prometheus scrapes metrics
-3. Alerts are generated
-4. Status is updated
+### SquidConfigs — `squidconfigs_webhook.go`
 
-## Component Dependencies
+Holds a package-level `client.Client` captured at setup, so the webhook can read cluster state.
 
-### Required Components
+- **Mutating**: no-op.
+- **Validating create/update**:
+    1. Require the `squid.ckd.clara.net/instance` annotation.
+    2. Fetch the named `SquidInstance` in the same namespace.
+    3. Create a `Job` (`generateName: validate-<name>-`) running the instance's image with
+       `echo '<rules>' > /etc/squid/conf.d/00-squid.conf && squid -k parse -f /etc/squid/conf.d/00-squid.conf`,
+       `restartPolicy: Never`.
+    4. Poll every 5s until success or failure, under a 2-minute context — image pull time counts
+       against that budget.
+- **Validating delete**: read the target ConfigMap; refuse while `<name>.conf` is still present. The
+  controller's deletion path removes the key, so the sequencing matters.
 
-- Kubernetes API Server
-- Controller Runtime
-- Metrics Server
-- Prometheus Operator
+The validation Jobs are not garbage-collected by the operator: set `ttlSecondsAfterFinished` at the
+cluster level or clean them up out of band.
 
-### Optional Components
+## Unused scaffolding — `internal/webhook/v1/`
 
-- Grafana for visualization
-- AlertManager for notifications
-- Cert-Manager for TLS
+Kubebuilder v4 `CustomDefaulter` / `CustomValidator` versions of both webhooks. They are **not
+registered** in `cmd/main.go` and their `Default`/`Validate*` bodies are still `TODO(user)`. The
+migration from `api/v1` is unfinished; changing behaviour means editing `api/v1`.
 
-## Next Steps
+## Deployment manifests
 
-- [Architecture](../architecture.md) - Overall architecture
-- [Networking](../architecture/networking.md) - Network components
-- [Monitoring](../architecture/monitoring.md) - Monitoring components
+| Path                              | Contents                                                                     |
+| --------------------------------- | ---------------------------------------------------------------------------- |
+| `config/crd/bases/`               | Generated CRDs — never hand-edited, run `make manifests`                     |
+| `config/rbac/`                    | Generated ClusterRole from `// +kubebuilder:rbac` markers, plus editor/viewer/admin roles |
+| `config/webhook/`                 | Webhook `Service` and generated configurations                               |
+| `config/certmanager/`             | `Issuer` and `Certificate` for the webhook and metrics serving certs         |
+| `config/network-policy/`          | Ingress policies for the metrics (`8443`) and webhook (`443`) ports          |
+| `config/prometheus/`              | `ServiceMonitor` for the controller metrics                                  |
+| `deploy/squid-operator/`          | Helm chart: CRDs, RBAC, webhooks, cert-manager `Certificate`, Deployment     |
+
+## Next steps
+
+- [Workflow](workflow.md) — how these components interact per operation
+- [Networking](networking.md) — ports and policies
+- [API Reference](../reference/api.md) — field semantics
