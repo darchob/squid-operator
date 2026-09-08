@@ -45,8 +45,8 @@ markdown_extensions:
   - pymdownx.mark
   - pymdownx.tilde
   - pymdownx.emoji:
-      emoji_index: !!python/name:materialx.emoji.twemoji
-      emoji_generator: !!python/name:materialx.emoji.to_svg
+      emoji_index: !!python/name:material.extensions.emoji.twemoji
+      emoji_generator: !!python/name:material.extensions.emoji.to_svg
   - admonition
   - footnotes
   - meta
@@ -56,14 +56,18 @@ markdown_extensions:
 nav:
   - Home: index.md
   - Getting Started:
+      - Installation: getting-started/installation.md
       - Quick Start: getting-started/quickstart.md
       - Basic Usage: user-guide/basic-usage.md
   - Architecture:
       - Overview: architecture/overview.md
       - Components: architecture/components.md
       - Workflow: architecture/workflow.md
+      - Networking: architecture/networking.md
   - User Guide:
       - Configuration: user-guide/configuration.md
+      - Scaling: user-guide/scaling.md
+      - Monitoring: user-guide/monitoring.md
       - Troubleshooting: user-guide/troubleshooting.md
   - Reference:
       - API Reference: reference/api.md
@@ -88,6 +92,5 @@ extra:
 plugins:
   - search
   - mike:
-      alias: latest
       version_selector: true
       canonical_version: latest
